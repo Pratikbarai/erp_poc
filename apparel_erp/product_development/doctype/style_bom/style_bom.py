@@ -204,17 +204,18 @@ def _generate_or_branch_for_colourway(style_doc, sb, cw, colour_code, ratio):
 	on the downstream state of any BOM already generated from this Style BOM
 	for this colourway."""
 	existing_bom_name = frappe.db.get_value(
-    "BOM",
-    {"custom_style": style_doc.name, "custom_colourway": colour_code, "docstatus": ["<", 2]},
-    "name",
-    order_by="creation desc",
-)
+		"BOM",
+		{"custom_style": style_doc.name, "custom_colourway": colour_code, "docstatus": ["<", 2]},
+		"name",
+		order_by="creation desc",
+	)
 
 	if existing_bom_name:
-    wo = frappe.db.get_value(
-        "Work Order", {"bom_no": existing_bom_name, "docstatus": 1},
-        ["name", "status", "produced_qty"], as_dict=True, order_by="creation desc",
-    )
+		wo = frappe.db.get_value(
+			"Work Order", {"bom_no": existing_bom_name, "docstatus": 1},
+			["name", "status", "produced_qty"], as_dict=True, order_by="creation desc",
+		)
+		
 		if wo and wo.status in ("In Process", "Completed"):
 			_write_variance_register(style_doc, sb, colour_code, existing_bom_name,
 				reason=_("Work Order {0} is {1} - existing BOM left untouched.").format(wo.name, wo.status))
