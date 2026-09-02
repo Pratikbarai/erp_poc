@@ -2,7 +2,7 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 from frappe import _
-from apparel_erp.product_development.doctype.style.style import advance_stage_at_least, get_effective_bom_items
+from apparel_erp.product_development.doctype.style.style import advance_stage_at_least, get_latest_style_bom
 
 
 class DesignTechPack(Document):
@@ -58,21 +58,31 @@ def get_style_snapshot(style):
 		size_code = frappe.db.get_value("Size", s.size, "size_code") or s.size
 		sizes.append({"size": s.size, "size_code": size_code})
 
-	bom_items = [
-		{
-			"item_type": b.item_type,
-			"item_name": b.item_name,
-			"description": b.description,
-			"composition": b.composition,
-			"gsm": b.gsm,
-			"consumption": b.consumption,
-			"uom": b.uom,
-			"base_qty": b.base_qty,
-			"tolerance": b.tolerance,
-			"available_in_market": b.get("available_in_market") if hasattr(b, "get") else (b.available_in_market if hasattr(b, "available_in_market") else 1)
-		}
-		for b in get_effective_bom_items(style_doc)
-	]
+	bom_items = []
+	latest_sb = get_latest_style_bom(style_doc.name)
+	if latest_sb:
+		sb_doc = frappe.get_doc("Style BOM", latest_sb["name"])
+		item_codes = list({row.item for row in sb_doc.lines if row.item})
+		item_meta = {}
+		if item_codes:
+			for i in frappe.get_all(
+				"Item", filters={"name": ["in", item_codes]}, fields=["name", "item_name", "description"]
+			):
+				item_meta[i.name] = i
+		for row in sb_doc.lines:
+			meta = item_meta.get(row.item, {})
+			bom_items.append({
+				"item_type": row.section,
+				"item_name": meta.get("item_name") or row.item,
+				"description": meta.get("description") or "",
+				"composition": "",
+				"gsm": "",
+				"consumption": f"{row.base_consumption} {row.uom}" if row.base_consumption else "",
+				"uom": row.uom,
+				"base_qty": row.base_consumption,
+				"tolerance": "",
+				"available_in_market": 1,
+			})
 
 	matrix_items = [
 		{
@@ -112,8 +122,7 @@ def get_style_snapshot(style):
 			"style_image": style_doc.style_image,
 			"size_chart": style_doc.size_chart,
 			"current_stage": style_doc.development_stage,
-			"created_on": style_doc.creation,
-			"bom_template": style_doc.bom_template
+			"created_on": style_doc.creation
 		},
 		"colours": colours,
 		"sizes": sizes,
