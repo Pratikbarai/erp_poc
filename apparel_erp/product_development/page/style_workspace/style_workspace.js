@@ -226,7 +226,7 @@ class StyleWorkspace {
 				<div class="sw-tabs" id="swTabs">
 					<button data-t="info" class="on">Style information</button>
 					<button data-t="colours">Colours &amp; sizes<span class="sw-count">${(s.matrix_items || []).length}</span></button>
-					<button data-t="bom">Style BOM<span class="sw-count">${(s.bom_items || []).length}</span></button>
+					<button data-t="bom">Style BOM</button>
 					<button data-t="techpack">Tech pack</button>
 					<button data-t="tna">Time &amp; action</button>
 					<button data-t="jobwork">Job work</button>
@@ -308,7 +308,7 @@ class StyleWorkspace {
 						<div class="sw-card-b">
 							${sw_attr_link("Item template", s.style_no, () => frappe.set_route("Form", "Item", s.style_no))}
 							${sw_attr_link("Variants", `${(s.matrix_items || []).filter(m => m.item).length} generated of ${(s.matrix_items || []).length}`, () => this.switch_tab("colours"))}
-							${sw_attr_link("BOM items", `${(s.bom_items || []).length} base rows`, () => this.switch_tab("bom"))}
+							${sw_attr_link("Style BOM", "Manage \u2192", () => this.switch_tab("bom"))}
 						</div>
 					</div>
 				</div>
@@ -396,7 +396,7 @@ class StyleWorkspace {
 					</div>
 					<div class="sw-card-b">
 						${matrix}
-						<div class="sw-note" style="margin-top:12px">SKU codes come from the style, colour and size codes. Generating creates a real Item + BOM in the background — this calls the same server method as the full form.</div>
+						<div class="sw-note" style="margin-top:12px">SKU codes come from the style, colour and size codes. Generation is gated and happens on the Style BOM document (Style Confirmed, PP approved, Lab Dip approved per colourway) - clicking a pending cell takes you there.</div>
 					</div>
 				</div>
 			</div>
@@ -410,9 +410,7 @@ class StyleWorkspace {
 			frappe.set_route("Form", "Item", $(e.currentTarget).data("item"));
 		});
 		$panels.find(".sw-sku-gen").on("click", (e) => {
-			const colour_code = $(e.currentTarget).data("colour");
-			const size_code = $(e.currentTarget).data("size");
-			this.generate_sku(colour_code, size_code);
+			this.point_to_style_bom_generation();
 		});
 		$panels.find(".sw-matrix-status").on("click", (e) => {
 			const matrix_item = $(e.currentTarget).data("row");
@@ -437,9 +435,7 @@ class StyleWorkspace {
 		$panels.find("#swGenAll").on("click", () => {
 			const pending = (this.style.matrix_items || []).filter(m => m.status !== "Active" || !m.item);
 			if (!pending.length) { sw_toast(this.wrapper, "All SKUs are already generated."); return; }
-			frappe.confirm(`Generate ${pending.length} pending SKUs and BOMs?`, () => {
-				this.generate_sku(pending[0].colour_code, pending[0].size_code, true);
-			});
+			this.point_to_style_bom_generation();
 		});
 
 		$panels.find("#swAddColour").on("click", () => this.add_colour());
@@ -517,48 +513,44 @@ class StyleWorkspace {
 		});
 	}
 
-	generate_sku(colour_code, size_code, is_bulk) {
-		frappe.dom.freeze(is_bulk ? "Generating all pending SKUs…" : "Generating SKU & BOM…");
+	point_to_style_bom_generation() {
+		// Generation now happens on the Style BOM document (gated: Style
+		// Confirmed, PP approved, Lab Dip approved per colourway, etc) and
+		// covers every approved colourway in one go - not per matrix cell.
 		frappe.call({
-			method: "apparel_erp.product_development.doctype.style.style.generate_sku",
-			args: { style: this.style.name, colour_code, size_code, generate_all: is_bulk ? 1 : 0 },
-			callback: (r) => {
-				frappe.dom.unfreeze();
-				if (r.message && r.message.item) {
-					sw_toast(this.wrapper, `Generated ${r.message.generated_count || 1} SKU(s), each with ${r.message.material_count || 0} BOM material(s).`);
-					this.load_style(this.style.name);
-					setTimeout(() => this.switch_tab("colours"), 50);
-				}
-			},
-			error: () => frappe.dom.unfreeze()
+			method: "apparel_erp.product_development.doctype.style.style.get_latest_style_bom",
+			args: { style: this.style.name }
+		}).then((r) => {
+			if (r.message && r.message.name && !r.message.inherited_from) {
+				frappe.set_route("Form", "Style BOM", r.message.name);
+			} else {
+				frappe.confirm(
+					"No Style BOM of its own exists for this Style yet. Create one now?",
+					() => frappe.new_doc("Style BOM", { style: this.style.name, bom_type: "Development" })
+				);
+			}
 		});
 	}
 
 	// ---------- Style BOM ----------
+	// BOM authoring moved off the Style doc onto the standalone, submittable
+	// Style BOM doctype (sparse authoring + override chain + gated colour-
+	// level generation - see Style BOM). This tab is now just a summary
+	// pointer into that doctype rather than an inline editor.
 	tpl_bom(s) {
-		const rows = s.bom_items || [];
-		let tbl = `<table><thead><tr><th style="width:34px">#</th><th>Type</th><th>Item</th><th style="width:70px">UOM</th><th class="sw-num" style="width:80px">Base qty</th><th style="width:80px">Tolerance</th><th style="width:36px"></th></tr></thead><tbody>`;
-		rows.forEach((r, i) => {
-			const item_label = r.raw_material
-				? `${r.item_name || "Item"} (${r.raw_material})`
-				: r.item_name || "";
-			tbl += `<tr><td>${i + 1}</td><td>${frappe.utils.escape_html(r.item_type || "")}</td><td>${frappe.utils.escape_html(item_label)}</td><td>${frappe.utils.escape_html(r.uom || "")}</td><td class="sw-num">${r.base_qty != null ? r.base_qty : ""}</td><td>${frappe.utils.escape_html(r.tolerance || "")}</td><td><span class="sw-x sw-bom-x" data-idx="${i}" title="Remove">&times;</span></td></tr>`;
-		});
-		tbl += `</tbody></table>`;
-		if (!rows.length) tbl = `<div class="sw-empty">No BOM items on this style yet.</div>`;
-
 		return `
 			<div class="sw-grid2" style="grid-template-columns:1.5fr 1fr">
 				<div class="sw-card">
-					<div class="sw-card-h"><h2>Style BOM — base</h2><div class="sw-right"><button class="sw-pill sw-pill-mut sw-version-button" id="swBomVersion" title="View BOM version history">v${frappe.utils.escape_html(s.bom_version || "1.0")}</button><button class="sw-btn sw-btn-sm" id="swAddBom">+ Add item</button></div></div>
-					${tbl}
-					<div class="sw-card-b"><div class="sw-note">Quantities are base quantities for this style. Per-size consumption factors aren't modelled in this schema yet — the prototype's factor table is illustrative only.</div></div>
+					<div class="sw-card-h"><h2>Style BOM</h2></div>
+					<div class="sw-card-b" id="swBomSummary">
+						<div class="sw-loading">Loading…</div>
+					</div>
 				</div>
 				<div class="sw-card">
 					<div class="sw-card-h"><h2>Sizes on this style</h2></div>
 					<table>
-						<thead><tr><th>Size</th><th class="sw-num">Sequence</th></tr></thead>
-						<tbody>${(s.sizes || []).map(sz => `<tr><td>${frappe.utils.escape_html(sz.size_code || sz.size)}</td><td class="sw-num">${sz.sequence != null ? sz.sequence : ""}</td></tr>`).join("") || `<tr><td colspan="2" class="sw-empty">No sizes</td></tr>`}</tbody>
+						<thead><tr><th>Size</th><th class="sw-num">Sequence</th><th class="sw-num">Ratio</th></tr></thead>
+						<tbody>${(s.sizes || []).map(sz => `<tr><td>${frappe.utils.escape_html(sz.size_code || sz.size)}</td><td class="sw-num">${sz.sequence != null ? sz.sequence : ""}</td><td class="sw-num">${sz.ratio != null ? sz.ratio : 1}</td></tr>`).join("") || `<tr><td colspan="3" class="sw-empty">No sizes</td></tr>`}</tbody>
 					</table>
 				</div>
 			</div>
@@ -567,87 +559,35 @@ class StyleWorkspace {
 
 	bind_bom() {
 		const $panels = $(this.wrapper).find("#swPanels");
-		$panels.find("#swBomVersion").on("click", () => this.show_version_history(
-			"BOM Version History",
-			"apparel_erp.product_development.doctype.style.style.get_bom_version_history",
-			{ style: this.style.name }
-		));
-		$panels.find("#swAddBom").on("click", () => this.add_bom_item());
-		$panels.find(".sw-bom-x").on("click", (e) => {
-			const idx = $(e.currentTarget).data("idx");
-			const row = (this.style.bom_items || [])[idx];
-			frappe.confirm(`Remove "${row.item_name}" from the BOM?`, () => {
-				this.style.bom_items = this.style.bom_items.filter(r => r !== row);
-				this.save_and_refresh("bom");
-			});
-		});
-	}
-
-	add_bom_item() {
-		let selected_item_code = null;
-		const dialog = new frappe.ui.Dialog({
-			title: "Add BOM item",
-			fields: [
-				{ fieldname: "item_type", label: "Item Type", fieldtype: "Select", options: "Fabric\nTrim\nPackaging", reqd: 1 },
-				{ fieldname: "item_name", label: "Item Name / Description", fieldtype: "Link", options: "Item", reqd: 1, description: "Select an existing Item, or type a new name to create it." },
-				{ fieldname: "uom", label: "UOM", fieldtype: "Link", options: "UOM", reqd: 1 },
-				{ fieldname: "base_qty", label: "Base Qty", fieldtype: "Float", reqd: 1 },
-				{ fieldname: "tolerance", label: "Tolerance", fieldtype: "Data" },
-				{ fieldname: "composition", label: "Composition", fieldtype: "Data" },
-				{ fieldname: "gsm", label: "GSM", fieldtype: "Data" }
-			],
-			primary_action_label: "Add",
-			primary_action: (values) => {
-				const add_row = (item_data, item_code) => {
-					this.style.bom_items = this.style.bom_items || [];
-					this.style.bom_items.push({
-						...values,
-						raw_material: item_code || "",
-						item_name: item_data.item_name || values.item_name,
-						uom: values.uom || item_data.stock_uom
-					});
-					dialog.hide();
-					this.save_and_refresh("bom");
-				};
-
-				const existing_item = selected_item_code || values.item_name;
-				frappe.db.get_value("Item", existing_item, ["name", "item_name", "stock_uom", "description", "item_group"]).then(r => {
-					if (r.message && r.message.name) {
-						add_row(r.message, r.message.name);
-						return;
-					}
-					frappe.confirm(`Create Item "${values.item_name}"?`, () => {
-						frappe.call({
-							method: "apparel_erp.product_development.doctype.style.style.create_bom_item",
-							args: { item_name: values.item_name, item_type: values.item_type, uom: values.uom },
-							callback: (response) => add_row(response.message, response.message.name)
-						});
-					});
+		const $summary = $panels.find("#swBomSummary");
+		frappe.call({
+			method: "apparel_erp.product_development.doctype.style.style.get_latest_style_bom",
+			args: { style: this.style.name }
+		}).then((r) => {
+			if (!r.message) {
+				$summary.html(`
+					<div class="sw-empty">No Style BOM yet.</div>
+					<button class="sw-btn sw-btn-pri" id="swCreateBom">+ Create Style BOM</button>
+				`);
+				$summary.find("#swCreateBom").on("click", () => {
+					frappe.new_doc("Style BOM", { style: this.style.name, bom_type: "Development" });
 				});
+				return;
 			}
-		});
-
-		dialog.fields_dict.item_name.$input.on("change", () => {
-			const item_code = dialog.get_value("item_name");
-			selected_item_code = null;
-			if (!item_code) return;
-			frappe.db.get_value("Item", item_code, ["item_name", "stock_uom", "description", "item_group"]).then(r => {
-				if (!r.message) return;
-				selected_item_code = item_code;
-				dialog.set_value("item_name", r.message.item_name || item_code);
-				dialog.set_value("uom", r.message.stock_uom || "");
-				dialog.set_value("description", r.message.description || "");
-				dialog.set_value("item_type", this.get_bom_item_type(r.message.item_group));
+			const sb = r.message;
+			const inherited_note = sb.inherited_from
+				? `<div class="sw-note">Inherited from Base Style ${frappe.utils.escape_html(sb.inherited_from)}</div>`
+				: "";
+			$summary.html(`
+				<div><b>${frappe.utils.escape_html(sb.name)}</b> - v${sb.version} - <span class="sw-pill ${sb.bom_type === "Bulk" ? "" : "sw-pill-mut"}">${frappe.utils.escape_html(sb.bom_type)}</span></div>
+				<div class="sw-note">${sb.line_count} line(s)</div>
+				${inherited_note}
+				<button class="sw-btn sw-btn-pri" id="swOpenBom" style="margin-top:8px">Open Style BOM</button>
+			`);
+			$summary.find("#swOpenBom").on("click", () => {
+				frappe.set_route("Form", "Style BOM", sb.name);
 			});
 		});
-		dialog.show();
-	}
-
-	get_bom_item_type(item_group) {
-		const group = (item_group || "").toLowerCase();
-		if (group.includes("fabric")) return "Fabric";
-		if (group.includes("pack")) return "Packaging";
-		return "Trim";
 	}
 
 	// ---------- Tech pack ----------
