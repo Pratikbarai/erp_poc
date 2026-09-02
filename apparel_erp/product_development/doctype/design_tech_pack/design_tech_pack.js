@@ -23,14 +23,14 @@ frappe.ui.form.on("Design Tech Pack", {
 	bom_template(frm) {
 		if (!frm.doc.bom_template || !frm.doc.style) return;
 		frappe.call({
-			method: "apparel_erp.product_development.doctype.style.style.import_bom_to_style",
+			method: "apparel_erp.product_development.doctype.style_bom.style_bom.import_bom_to_style_bom",
 			args: { style: frm.doc.style, bom: frm.doc.bom_template },
 			freeze: true,
 			freeze_message: __("Loading BOM materials...")
 		}).then((r) => {
 			if (!r.message) return;
 			frappe.show_alert({
-				message: __("Loaded {0} BOM material(s) into the linked Style.", [r.message.item_count]),
+				message: __("Loaded {0} BOM material(s) into Style BOM {1}.", [r.message.item_count, r.message.style_bom]),
 				indicator: "green"
 			});
 			load_style_snapshot(frm);
