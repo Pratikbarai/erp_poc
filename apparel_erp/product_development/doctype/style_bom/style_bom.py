@@ -40,6 +40,39 @@ def guard_generated_bom_readonly(bom_doc, method=None):
 	)
 
 
+@frappe.whitelist()
+def import_bom_to_style_bom(style, bom):
+	"""Copy an existing native BOM's materials into a Draft Style BOM for
+	this style - creating one (Development type) if none exists yet. Lines
+	are copied as Fixed/invariant; mark varies_by_colour / varies_by_size
+	and add overrides afterwards for anything that actually varies."""
+	existing_name = frappe.db.get_value(
+		"Style BOM", {"style": style, "docstatus": 0}, "name", order_by="creation desc"
+	)
+	if existing_name:
+		sb = frappe.get_doc("Style BOM", existing_name)
+	else:
+		sb = frappe.new_doc("Style BOM")
+		sb.style = style
+		sb.bom_type = "Development"
+
+	source = frappe.get_doc("BOM", bom)
+	item_count = 0
+	for row in source.items:
+		sb.append("lines", {
+			"section": "Fabric",
+			"item": row.item_code,
+			"uom": row.uom,
+			"base_consumption": row.qty,
+			"resolution_rule": "Fixed",
+		})
+		item_count += 1
+
+	sb.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"style_bom": sb.name, "item_count": item_count}
+
+
 # ---------------------------------------------------------------------------
 # Resolution chain (spec section 5)
 # Specificity wins: colourway+size beats size-only beats colourway-only
