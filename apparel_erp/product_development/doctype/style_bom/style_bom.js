@@ -76,13 +76,17 @@ function render_generation_log(frm) {
 				: `<span class="indicator-pill green">${__("Generated")}</span>`;
 			html += `<tr>
 				<td>${frappe.utils.escape_html(row.colourway || "")}</td>
-				<td><a href="/app/bom/${encodeURIComponent(row.generated_bom)}">${frappe.utils.escape_html(row.generated_bom || "")}</a></td>
+				<td><a href="#" class="sw-open-bom" data-bom="${frappe.utils.escape_html(row.generated_bom || "")}">${frappe.utils.escape_html(row.generated_bom || "")}</a></td>
 				<td>${frappe.datetime.comment_when(row.creation)}</td>
 				<td>${badge}</td>
 			</tr>`;
 		});
 		html += `</tbody></table>`;
 		field.$wrapper.html(html);
+		field.$wrapper.find(".sw-open-bom").on("click", function (e) {
+		    e.preventDefault();
+		    frappe.set_route("Form", "BOM", $(this).attr("data-bom"));
+		});
 	});
 }
 
