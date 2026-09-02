@@ -1,0 +1,15 @@
+{
+ "doctype": "DocType",
+ "name": "Tech Pack Reference Image",
+ "module": "Product Development",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "image_field": "image",
+ "fields": [
+  {"fieldname": "label", "fieldtype": "Data", "label": "Label", "reqd": 1, "in_list_view": 1, "description": "e.g. Collar & Placket, Pocket, Back Yoke, Cuff, Hem"},
+  {"fieldname": "image", "fieldtype": "Attach Image", "label": "Image", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "sequence", "fieldtype": "Int", "label": "Sort Sequence"}
+ ],
+ "permissions": []
+}

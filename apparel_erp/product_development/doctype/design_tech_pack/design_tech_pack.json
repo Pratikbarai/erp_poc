@@ -1,0 +1,560 @@
+{
+  "doctype": "DocType",
+  "name": "Design Tech Pack",
+  "module": "Product Development",
+  "autoname": "format:TP-{style}",
+  "naming_rule": "Expression",
+  "engine": "InnoDB",
+  "is_submittable": 0,
+  "image_field": "style_image",
+  "title_field": "style_name",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "tab_style_overview",
+      "fieldtype": "Tab Break",
+      "label": "Style Overview",
+      "is_custom_field": false
+    },
+    {
+      "fieldname": "style",
+      "fieldtype": "Link",
+      "label": "Style",
+      "options": "Style",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "sb_header",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "col_h1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "style_no",
+      "fieldtype": "Data",
+      "label": "Style No.",
+      "fetch_from": "style.style_no",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "style_name",
+      "fieldtype": "Data",
+      "label": "Style Name",
+      "fetch_from": "style.style_name"
+    },
+    {
+      "fieldname": "product_type",
+      "fieldtype": "Data",
+      "label": "Product Type",
+      "fetch_from": "style.product_type"
+    },
+    {
+      "fieldname": "company",
+      "fieldtype": "Link",
+      "label": "Company",
+      "fetch_from": "style.company",
+      "options": "Company"
+    },
+    {
+      "fieldname": "category",
+      "fieldtype": "Data",
+      "label": "Category",
+      "fetch_from": "style.category"
+    },
+    {
+      "fieldname": "season",
+      "fieldtype": "Data",
+      "label": "Season",
+      "fetch_from": "style.season"
+    },
+    {
+      "fieldname": "col_h2",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "customer_brand",
+      "fieldtype": "Data",
+      "label": "Customer / Brand",
+      "fetch_from": "style.customer_brand"
+    },
+    {
+      "fieldname": "designer",
+      "fieldtype": "Data",
+      "label": "Designer",
+      "fetch_from": "style.designer"
+    },
+    {
+      "fieldname": "merchandiser",
+      "fieldtype": "Data",
+      "label": "Merchandiser",
+      "fetch_from": "style.merchandiser"
+    },
+    {
+      "fieldname": "department",
+      "fieldtype": "Data",
+      "label": "Department",
+      "fetch_from": "style.department"
+    },
+    {
+      "fieldname": "country_of_origin",
+      "fieldtype": "Data",
+      "label": "Country of Origin",
+      "fetch_from": "style.country_of_origin"
+    },
+    {
+      "fieldname": "created_on",
+      "fieldtype": "Date",
+      "label": "Created On",
+      "read_only": 1,
+      "fetch_from": "style.creation"
+    },
+    {
+      "fieldname": "col_h3",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "current_stage",
+      "fieldtype": "Data",
+      "label": "Current Stage",
+      "default": "Design & Tech Pack",
+      "read_only": 1,
+      "fetch_from": "style.development_stage"
+    },
+    {
+      "fieldname": "tech_pack_version",
+      "fieldtype": "Data",
+      "label": "Tech Pack Version",
+      "default": "1.0",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "last_updated_on",
+      "fieldtype": "Datetime",
+      "label": "Last Updated On",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_updated_by",
+      "fieldtype": "Data",
+      "label": "Last Updated By",
+      "read_only": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Not Started\nIn Progress\nCompleted",
+      "default": "Not Started",
+      "in_list_view": 1,
+      "fetch_from": "style.status"
+    },
+    {
+      "fieldname": "col_h4",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "style_image",
+      "fieldtype": "Attach Image",
+      "label": "Style Image",
+      "fetch_from": "style.style_image"
+    },
+    {
+      "fieldname": "tab_design_tech_pack",
+      "fieldtype": "Tab Break",
+      "label": "Design & Tech Pack",
+      "is_custom_field": false
+    },
+    {
+      "fieldname": "sb_key_attrs",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "col_ka1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "description",
+      "fieldtype": "Small Text",
+      "label": "Description",
+      "fetch_from": "style.description"
+    },
+    {
+      "fieldname": "col_ka2",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "fit",
+      "fieldtype": "Data",
+      "label": "Fit",
+      "fetch_from": "style.fit"
+    },
+    {
+      "fieldname": "sleeve",
+      "fieldtype": "Data",
+      "label": "Sleeve",
+      "fetch_from": "style.sleeve"
+    },
+    {
+      "fieldname": "placket",
+      "fieldtype": "Data",
+      "label": "Placket",
+      "fetch_from": "style.placket"
+    },
+    {
+      "fieldname": "col_ka3",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "collar",
+      "fieldtype": "Data",
+      "label": "Collar",
+      "fetch_from": "style.collar"
+    },
+    {
+      "fieldname": "gender",
+      "fieldtype": "Data",
+      "label": "Gender",
+      "fetch_from": "style.gender"
+    },
+    {
+      "fieldname": "fabric_type_field",
+      "fieldtype": "Data",
+      "label": "Fabric Type",
+      "fetch_from": "style.fabric_type"
+    },
+    {
+      "fieldname": "sb_sketch",
+      "fieldtype": "Section Break",
+      "label": "1. Design Sketch"
+    },
+    {
+      "fieldname": "col_sketch1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "front_sketch",
+      "fieldtype": "Attach Image",
+      "label": "Front"
+    },
+    {
+      "fieldname": "col_sketch2",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "back_sketch",
+      "fieldtype": "Attach Image",
+      "label": "Back"
+    },
+    {
+      "fieldname": "callouts_html",
+      "fieldtype": "HTML",
+      "description": "Click on the Front or Back sketch above to drop a numbered pin, then describe the construction detail. Rendered live on the Style Workspace page."
+    },
+    {
+      "fieldname": "callouts",
+      "fieldtype": "Table",
+      "label": "Construction Callouts",
+      "options": "Tech Pack Callout"
+    },
+    {
+      "fieldname": "sb_colourways",
+      "fieldtype": "Section Break",
+      "label": "2. Colourways"
+    },
+    {
+      "fieldname": "colourways_html",
+      "fieldtype": "HTML",
+      "description": "Read-only, pulled from the Style's Colours table - add/edit colours on the Style itself."
+    },
+    {
+      "fieldname": "sb_sizerange",
+      "fieldtype": "Section Break",
+      "label": "3. Size Range"
+    },
+    {
+      "fieldname": "sizerange_html",
+      "fieldtype": "HTML",
+      "description": "Read-only, pulled from the Style's Sizes selection."
+    },
+    {
+      "fieldname": "matrix_status_html",
+      "fieldtype": "HTML",
+      "label": "SKU Matrix Status",
+      "description": "Read-only, pulled live from the Style's Colour x Size matrix."
+    },
+    {
+      "fieldname": "size_chart",
+      "fieldtype": "Attach",
+      "label": "Size Chart",
+      "fetch_from": "style.size_chart",
+      "hidden": 1
+    },
+    {
+      "fieldname": "sb_measurements",
+      "fieldtype": "Section Break",
+      "label": "4. Measurements (Finished Garment)"
+    },
+    {
+      "fieldname": "measurements_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "fieldname": "measurements",
+      "fieldtype": "Table",
+      "options": "Tech Pack Measurement",
+      "hidden": 1,
+      "fetch_from": ""
+    },
+    {
+      "fieldname": "sb_construction",
+      "fieldtype": "Section Break",
+      "label": "5. Construction Details"
+    },
+    {
+      "fieldname": "col_con1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "seam_type",
+      "fieldtype": "Data",
+      "label": "Seam Type"
+    },
+    {
+      "fieldname": "stitch_per_inch",
+      "fieldtype": "Data",
+      "label": "Stitch Per Inch"
+    },
+    {
+      "fieldname": "seam_allowance",
+      "fieldtype": "Data",
+      "label": "Seam Allowance"
+    },
+    {
+      "fieldname": "col_con2",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "overlock",
+      "fieldtype": "Select",
+      "label": "Overlock",
+      "options": "Yes\nNo",
+      "default": "Yes"
+    },
+    {
+      "fieldname": "top_stitch",
+      "fieldtype": "Data",
+      "label": "Top Stitch"
+    },
+    {
+      "fieldname": "special_instructions",
+      "fieldtype": "Small Text",
+      "label": "Special Instructions"
+    },
+    {
+      "fieldname": "col_con3",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "construction_diagram",
+      "fieldtype": "Attach Image",
+      "label": "Construction Diagram"
+    },
+    {
+      "fieldname": "sb_fabric_trims",
+      "fieldtype": "Section Break",
+      "label": "6. Fabric & Trims"
+    },
+    {
+      "fieldname": "fabric_trims_html",
+      "fieldtype": "HTML",
+      "description": "Read-only, pulled from the Style's BOM table - add/edit lines on the Style's BOM tab."
+    },
+    {
+      "fieldname": "bom_template",
+      "fieldtype": "Link",
+      "label": "Existing BOM",
+      "options": "BOM",
+      "description": "Select an existing BOM to copy its materials into the linked Style."
+    },
+    {
+      "fieldname": "sb_ref_images",
+      "fieldtype": "Section Break",
+      "label": "7. Reference Images"
+    },
+    {
+      "fieldname": "reference_images",
+      "fieldtype": "Table",
+      "options": "Tech Pack Reference Image"
+    },
+    {
+      "fieldname": "sb_attachments",
+      "fieldtype": "Section Break",
+      "label": "8. Attachments"
+    },
+    {
+      "fieldname": "attachments_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "fieldname": "attachments",
+      "fieldtype": "Table",
+      "options": "Tech Pack Attachment",
+      "hidden": 1
+    },
+    {
+      "fieldname": "sb_activity",
+      "fieldtype": "Section Break",
+      "label": "9. Activity Log"
+    },
+    {
+      "fieldname": "activity_html",
+      "fieldtype": "HTML",
+      "description": "Shows this record's standard Frappe version/comment timeline."
+    },
+    {
+      "fieldname": "sb_next_action",
+      "fieldtype": "Section Break",
+      "label": "10. Next Action"
+    },
+    {
+      "fieldname": "col_na1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "assign_to",
+      "fieldtype": "Link",
+      "label": "Assign To",
+      "options": "User"
+    },
+    {
+      "fieldname": "col_na2",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "next_action_html",
+      "fieldtype": "HTML"
+    },
+    {
+      "fieldname": "tab_bom",
+      "fieldtype": "Tab Break",
+      "label": "BOM",
+      "is_custom_field": false
+    },
+    {
+      "fieldname": "bom_placeholder_html",
+      "fieldtype": "HTML",
+      "options": "Select an existing BOM above to load its materials into the linked Style."
+    },
+    {
+      "fieldname": "tab_samples",
+      "fieldtype": "Tab Break",
+      "label": "Samples",
+      "is_custom_field": false
+    },
+    {
+      "fieldname": "samples_placeholder_html",
+      "fieldtype": "HTML",
+      "options": "Sample tracking will be available here."
+    },
+    {
+      "fieldname": "tab_costing",
+      "fieldtype": "Tab Break",
+      "label": "Costing",
+      "is_custom_field": false
+    },
+    {
+      "fieldname": "costing_placeholder_html",
+      "fieldtype": "HTML",
+      "options": "Style costing will be available here."
+    },
+    {
+      "fieldname": "tab_fit_approval",
+      "fieldtype": "Tab Break",
+      "label": "Fit Approval",
+      "is_custom_field": false
+    },
+    {
+      "fieldname": "fit_approval_placeholder_html",
+      "fieldtype": "HTML",
+      "options": "Fit approval tracking will be available here."
+    },
+    {
+      "fieldname": "tab_proto_approval",
+      "fieldtype": "Tab Break",
+      "label": "Proto Approval",
+      "is_custom_field": false
+    },
+    {
+      "fieldname": "proto_approval_placeholder_html",
+      "fieldtype": "HTML",
+      "options": "Proto approval tracking will be available here."
+    },
+    {
+      "fieldname": "tab_production",
+      "fieldtype": "Tab Break",
+      "label": "Production",
+      "is_custom_field": false
+    },
+    {
+      "fieldname": "production_confirmed",
+      "fieldtype": "Check",
+      "label": "Production Confirmed",
+      "default": 0,
+      "read_only": 0,
+      "description": "Mark as confirmed to lock colour/size selection and prevent further edits to Style and BOM"
+    },
+    {
+      "fieldname": "sb_production",
+      "fieldtype": "Section Break",
+      "label": "Production Selection"
+    },
+    {
+      "fieldname": "production_selection_html",
+      "fieldtype": "HTML",
+      "options": "Select colours, sizes, and BOM items to be produced."
+    },
+    {
+      "fieldname": "tab_print",
+      "fieldtype": "Tab Break",
+      "label": "Print",
+      "is_custom_field": false
+    },
+    {
+      "fieldname": "sb_print_options",
+      "fieldtype": "Section Break",
+      "label": "Print Options"
+    },
+    {
+      "fieldname": "print_sections",
+      "fieldtype": "MultiSelect",
+      "label": "Sections to Print",
+      "options": "Design Sketch\nColourways\nSize Range\nMeasurements\nConstruction Details\nFabric & Trims\nReference Images\nAll",
+      "default": "All"
+    },
+    {
+      "fieldname": "print_options_html",
+      "fieldtype": "HTML",
+      "options": "Choose which sections to include in the printed tech pack."
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "Manufacturing Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1
+    }
+  ]
+}

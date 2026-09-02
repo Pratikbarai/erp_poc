@@ -1,0 +1,51 @@
+[
+ {
+  "doctype": "Custom Field",
+  "dt": "BOM",
+  "fieldname": "custom_style",
+  "label": "Style",
+  "fieldtype": "Link",
+  "options": "Style",
+  "insert_after": "item",
+  "read_only": 1,
+  "print_hide": 1,
+  "no_copy": 1,
+  "description": "Set automatically when this BOM was generated from a Style BOM. Do not edit."
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "BOM",
+  "fieldname": "custom_style_bom",
+  "label": "Style BOM",
+  "fieldtype": "Link",
+  "options": "Style BOM",
+  "insert_after": "custom_style",
+  "read_only": 1,
+  "print_hide": 1,
+  "no_copy": 1,
+  "description": "The submitted Style BOM this native BOM was generated from. Do not edit."
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "BOM",
+  "fieldname": "custom_style_bom_version",
+  "label": "Style BOM Version",
+  "fieldtype": "Int",
+  "insert_after": "custom_style_bom",
+  "read_only": 1,
+  "print_hide": 1,
+  "no_copy": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "BOM",
+  "fieldname": "custom_colourway",
+  "label": "Colourway",
+  "fieldtype": "Data",
+  "insert_after": "custom_style_bom_version",
+  "read_only": 1,
+  "print_hide": 1,
+  "no_copy": 1,
+  "description": "Generated BOMs are read-only forever - see Style BOM section 7.1. Amend the Style BOM and regenerate instead of editing this document."
+ }
+]

@@ -1,0 +1,16 @@
+{
+ "doctype": "DocType",
+ "name": "Tech Pack Measurement",
+ "module": "Product Development",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "sequence", "fieldtype": "Int", "label": "#", "in_list_view": 1},
+  {"fieldname": "measurement_point", "fieldtype": "Data", "label": "Measurement Point", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "size", "fieldtype": "Data", "label": "Size", "in_list_view": 1},
+  {"fieldname": "value", "fieldtype": "Float", "label": "Value", "precision": "2", "in_list_view": 1},
+  {"fieldname": "tolerance", "fieldtype": "Float", "label": "Tol. (+/-)", "precision": "2", "in_list_view": 1}
+ ],
+ "permissions": []
+}

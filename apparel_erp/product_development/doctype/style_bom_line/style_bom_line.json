@@ -1,0 +1,21 @@
+{
+ "doctype": "DocType",
+ "name": "Style BOM Line",
+ "module": "Product Development",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "line_id", "fieldtype": "Data", "label": "Line ID", "read_only": 1, "hidden": 1, "description": "Stable identifier generated on insert. Style BOM Override rows join to this. Never recomputed - row order (idx) is not safe to key on, since reordering/deleting a line would silently re-point overrides."},
+  {"fieldname": "section", "fieldtype": "Select", "label": "Section", "options": "Fabric\nTrim\nPacking\nValue-add", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "item", "fieldtype": "Link", "label": "Item", "options": "Item", "reqd": 1, "in_list_view": 1, "description": "The Item template if this line varies by colour/size, otherwise the concrete item."},
+  {"fieldname": "uom", "fieldtype": "Link", "label": "UOM", "options": "UOM", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "base_consumption", "fieldtype": "Float", "label": "Base Consumption", "reqd": 1, "precision": "4", "in_list_view": 1, "description": "Per garment, at base size. Always populated - this is the fallback when no override applies."},
+  {"fieldname": "wastage_pct", "fieldtype": "Float", "label": "Wastage %", "precision": "2", "default": "0"},
+  {"fieldname": "varies_by_colour", "fieldtype": "Check", "label": "Varies by Colour", "in_list_view": 1},
+  {"fieldname": "varies_by_size", "fieldtype": "Check", "label": "Varies by Size", "in_list_view": 1},
+  {"fieldname": "resolution_rule", "fieldtype": "Select", "label": "Resolution Rule", "options": "Fixed\nMatch garment colour\nMatch garment size\nExplicit Override", "default": "Fixed", "in_list_view": 1},
+  {"fieldname": "position", "fieldtype": "Data", "label": "Position", "description": "Placement on the garment, e.g. 'CB neck'."}
+ ],
+ "permissions": []
+}

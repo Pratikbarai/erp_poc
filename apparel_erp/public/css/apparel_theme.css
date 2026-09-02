@@ -1,0 +1,300 @@
+/*
+ * Apparel ERP — light desk theming.
+ * Brings the standard Style / Design Tech Pack forms visually in line with
+ * the navy/blue palette used on the Style Workspace page, without changing
+ * any Frappe layout or behaviour. Safe to trim or remove — nothing here is
+ * required for the app to function.
+ */
+
+:root {
+	--apparel-navy: #0F172A;
+	--apparel-accent: #2563EB;
+	--apparel-accent-soft: #EFF6FF;
+	--apparel-ok: #15803D;
+	--apparel-ok-bg: #DCFCE7;
+	--apparel-warn: #B45309;
+	--apparel-warn-bg: #FEF3C7;
+	--apparel-bad: #B91C1C;
+	--apparel-bad-bg: #FEE2E2;
+}
+
+/* Primary buttons + form tab underline pick up the workspace accent blue */
+.btn-primary {
+	background-color: var(--apparel-accent) !important;
+	border-color: var(--apparel-accent) !important;
+}
+.form-tabs .nav-link.active {
+	color: var(--apparel-accent) !important;
+	border-bottom-color: var(--apparel-accent) !important;
+}
+
+/* Status indicator pills on Style / Design Tech Pack list + form views */
+.indicator-pill.green, .indicator.green { background: var(--apparel-ok-bg); color: var(--apparel-ok); }
+.indicator-pill.orange, .indicator.orange,
+.indicator-pill.yellow, .indicator.yellow { background: var(--apparel-warn-bg); color: var(--apparel-warn); }
+.indicator-pill.red, .indicator.red { background: var(--apparel-bad-bg); color: var(--apparel-bad); }
+
+/* Section headings inside Style / Design Tech Pack forms */
+.form-section .section-head {
+	letter-spacing: .4px;
+}
+
+/* Design Tech Pack: make the long working form easier to scan without
+   changing Frappe's layout or affecting other doctypes. */
+.design-tech-pack-form {
+	--tp-ink: #172033;
+	--tp-muted: #64748B;
+	--tp-line: #D7E0EC;
+	--tp-surface: #F8FAFC;
+	background: #F3F6FA;
+}
+.design-tech-pack-form .form-layout {
+	background: #FFFFFF;
+	border: 1px solid var(--tp-line);
+	border-radius: 8px;
+	box-shadow: 0 8px 24px rgba(23, 32, 51, .06);
+	padding: 8px 18px 24px;
+}
+.design-tech-pack-form .tp-record-header {
+	align-items: center;
+	background: #FFFFFF;
+	border: 1px solid var(--tp-line);
+	border-radius: 8px;
+	display: flex;
+	gap: 14px;
+	margin: 0 0 12px;
+	min-height: 92px;
+	padding: 12px 16px;
+}
+.design-tech-pack-form .tp-record-image {
+	align-items: center;
+	background: #E8EEF6;
+	border: 1px solid var(--tp-line);
+	border-radius: 6px;
+	display: flex;
+	flex: 0 0 68px;
+	height: 68px;
+	justify-content: center;
+	overflow: hidden;
+}
+.design-tech-pack-form .tp-record-image img {
+	height: 100%;
+	object-fit: cover;
+	width: 100%;
+}
+.design-tech-pack-form .tp-header-placeholder {
+	color: var(--tp-muted);
+	font-size: 10px;
+	text-align: center;
+}
+.design-tech-pack-form .tp-record-copy {
+	min-width: 0;
+}
+.design-tech-pack-form .tp-record-kicker {
+	color: var(--tp-muted);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: .45px;
+	margin-bottom: 3px;
+	text-transform: uppercase;
+}
+.design-tech-pack-form .tp-record-kicker span,
+.design-tech-pack-form .tp-record-subtitle span {
+	color: #A0AEC0;
+	padding: 0 4px;
+}
+.design-tech-pack-form .tp-record-title-row {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 9px;
+}
+.design-tech-pack-form .tp-record-title-row h1 {
+	color: var(--tp-ink);
+	font-size: 22px;
+	font-weight: 700;
+	letter-spacing: -.2px;
+	line-height: 1.2;
+	margin: 0;
+}
+.design-tech-pack-form .tp-record-status {
+	align-items: center;
+	border-radius: 20px;
+	display: inline-flex;
+	font-size: 11px;
+	font-weight: 700;
+	gap: 5px;
+	padding: 3px 9px;
+}
+.design-tech-pack-form .tp-record-status > span {
+	border-radius: 50%;
+	height: 6px;
+	width: 6px;
+}
+.design-tech-pack-form .tp-record-status.done { background: var(--apparel-ok-bg); color: var(--apparel-ok); }
+.design-tech-pack-form .tp-record-status.done > span { background: var(--apparel-ok); }
+.design-tech-pack-form .tp-record-status.active { background: var(--apparel-accent-soft); color: var(--apparel-accent); }
+.design-tech-pack-form .tp-record-status.active > span { background: var(--apparel-accent); }
+.design-tech-pack-form .tp-record-status.pending { background: #F1F5F9; color: var(--tp-muted); }
+.design-tech-pack-form .tp-record-status.pending > span { background: #94A3B8; }
+.design-tech-pack-form .tp-record-subtitle {
+	color: #475569;
+	font-size: 13px;
+	margin-top: 4px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.design-tech-pack-form .tp-record-actions {
+	display: flex;
+	gap: 7px;
+	margin-left: auto;
+}
+.design-tech-pack-form .tp-record-actions .btn {
+	white-space: nowrap;
+}
+.design-tech-pack-form .form-section {
+	border-top: 1px solid var(--tp-line);
+	padding-top: 14px;
+}
+.design-tech-pack-form .form-section:first-child {
+	border-top: 0;
+}
+.design-tech-pack-form .section-head {
+	color: var(--tp-ink);
+	font-size: 13px;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+.design-tech-pack-form .control-label {
+	color: var(--tp-muted);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: .35px;
+	text-transform: uppercase;
+}
+.design-tech-pack-form .form-control {
+	border-color: var(--tp-line);
+	border-radius: 5px;
+}
+.design-tech-pack-form .tp-stage-tabs {
+	display: flex;
+	gap: 2px;
+	margin: 0 0 14px;
+	overflow-x: auto;
+	padding: 0 2px;
+	white-space: nowrap;
+}
+.design-tech-pack-form .tp-stage-tab {
+	border-bottom: 3px solid transparent;
+	color: var(--tp-muted);
+	cursor: pointer;
+	font-size: 12px;
+	font-weight: 600;
+	padding: 9px 12px 8px;
+}
+.design-tech-pack-form .tp-stage-tab:hover {
+	background: var(--apparel-accent-soft);
+	color: var(--apparel-accent);
+}
+.design-tech-pack-form .tp-stage-tab.active {
+	background: var(--apparel-accent-soft);
+	border-bottom-color: var(--apparel-accent);
+	color: var(--apparel-accent);
+}
+.design-tech-pack-form .tp-stage-tab.disabled {
+	cursor: not-allowed;
+	opacity: .45;
+}
+.design-tech-pack-form .tp-swatch-row,
+.design-tech-pack-form .tp-size-pills,
+.design-tech-pack-form .tp-attach-grid {
+	background: var(--tp-surface);
+	border: 1px solid var(--tp-line);
+	border-radius: 6px;
+	padding: 12px;
+}
+.design-tech-pack-form .tp-measure-table,
+.design-tech-pack-form .table {
+	border-color: var(--tp-line);
+}
+.design-tech-pack-form .table thead th {
+	background: var(--tp-surface);
+	color: var(--tp-muted);
+	font-size: 11px;
+	letter-spacing: .25px;
+	text-transform: uppercase;
+}
+.design-tech-pack-form .tp-attach-add {
+	min-height: 84px;
+	border-color: #AFC4E0;
+	background: #FFFFFF;
+	color: var(--apparel-accent);
+	font-weight: 600;
+}
+.design-tech-pack-form .tp-marker-layer {
+	inset: 0;
+	pointer-events: none;
+	position: absolute;
+}
+.design-tech-pack-form .tp-sketch-marker {
+	align-items: center;
+	background: #0D9488;
+	border: 2px solid #FFFFFF;
+	border-radius: 50%;
+	box-shadow: 0 2px 5px rgba(15, 23, 42, .25);
+	color: #FFFFFF;
+	display: flex;
+	font-size: 11px;
+	font-weight: 700;
+	height: 24px;
+	justify-content: center;
+	position: absolute;
+	transform: translate(-50%, -50%);
+	width: 24px;
+}
+.design-tech-pack-form .tp-callout-row {
+	align-items: center;
+	display: flex;
+	gap: 8px;
+	padding: 8px 10px;
+}
+.design-tech-pack-form .tp-callout-row + .tp-callout-row {
+	border-top: 1px solid var(--tp-line);
+}
+.design-tech-pack-form .tp-callout-number {
+	align-items: center;
+	background: #0D9488;
+	border-radius: 50%;
+	color: #FFFFFF;
+	display: inline-flex;
+	flex: 0 0 22px;
+	font-size: 11px;
+	font-weight: 700;
+	height: 22px;
+	justify-content: center;
+	width: 22px;
+}
+.design-tech-pack-form .tp-callout-sketch {
+	color: var(--tp-muted);
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+.design-tech-pack-form .tp-callout-text {
+	color: var(--tp-ink);
+	font-size: 12px;
+}
+
+@media (max-width: 767px) {
+	.design-tech-pack-form .form-layout { padding: 4px 10px 18px; }
+	.design-tech-pack-form .tp-stage-tab { padding-left: 9px; padding-right: 9px; }
+	.design-tech-pack-form .tp-record-header { align-items: flex-start; flex-wrap: wrap; }
+	.design-tech-pack-form .tp-record-actions { margin-left: 0; width: 100%; }
+	.design-tech-pack-form .tp-record-actions .btn { flex: 1; }
+}
+
+/* Workflow stepper + matrix widgets already rendered by style.js / design_tech_pack.js —
+   keep their bubble colours consistent with the workspace page. */
+.tp-wf-bubble.active { background: var(--apparel-accent) !important; border-color: var(--apparel-accent) !important; }
+.apparel-matrix .matrix-generated { color: var(--apparel-accent); }

@@ -1,0 +1,17 @@
+{
+ "doctype": "DocType",
+ "name": "Style Colour",
+ "module": "Product Development",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "colour_name", "fieldtype": "Data", "label": "Colour Name", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "colour_code", "fieldtype": "Data", "label": "Colour Code", "description": "Short code used in SKU, e.g. WHT, BLU, GRN", "in_list_view": 1},
+  {"fieldname": "colour_attribute_value", "fieldtype": "Link", "label": "Colour Attribute Value", "options": "Item Attribute Value", "description": "Bridge to native ERPNext variants. Set this to the matching Item Attribute Value (attribute 'Colour') so BOM lines with Resolution Rule 'Match garment colour' can auto-resolve item variants by attribute match instead of a manual lookup."},
+  {"fieldname": "swatch", "fieldtype": "Color", "label": "Swatch", "in_list_view": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Active\nInactive", "default": "Active", "in_list_view": 1},
+  {"fieldname": "approved_for_production", "fieldtype": "Check", "label": "Approved for Production", "default": 0, "in_list_view": 1, "description": "Check if this colour has been approved by Marketing for production"}
+ ],
+ "permissions": []
+}

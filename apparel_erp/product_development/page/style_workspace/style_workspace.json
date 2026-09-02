@@ -1,0 +1,14 @@
+{
+  "doctype": "Page",
+  "name": "style-workspace",
+  "module": "Product Development",
+  "page_name": "style-workspace",
+  "title": "Style Workspace",
+  "icon": "fa fa-suitcase",
+  "standard": "Yes",
+  "system_page": 0,
+  "roles": [
+    {"role": "System Manager"},
+    {"role": "Manufacturing Manager"}
+  ]
+}
