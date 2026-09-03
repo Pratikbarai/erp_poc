@@ -575,17 +575,46 @@ class StyleWorkspace {
 				return;
 			}
 			const sb = r.message;
-			const inherited_note = sb.inherited_from
-				? `<div class="sw-note">Inherited from Base Style ${frappe.utils.escape_html(sb.inherited_from)}</div>`
-				: "";
-			$summary.html(`
-				<div><b>${frappe.utils.escape_html(sb.name)}</b> - v${sb.version} - <span class="sw-pill ${sb.bom_type === "Bulk" ? "" : "sw-pill-mut"}">${frappe.utils.escape_html(sb.bom_type)}</span></div>
-				<div class="sw-note">${sb.line_count} line(s)</div>
-				${inherited_note}
-				<button class="sw-btn sw-btn-pri" id="swOpenBom" style="margin-top:8px">Open Style BOM</button>
-			`);
-			$summary.find("#swOpenBom").on("click", () => {
-				frappe.set_route("Form", "Style BOM", sb.name);
+			$summary.html(`<div class="sw-loading">Loading BOM lines…</div>`);
+
+			frappe.call({
+				method: "frappe.client.get",
+				args: { doctype: "Style BOM", name: sb.name }
+			}).then((r2) => {
+				const full = r2.message || {};
+				const lines = full.lines || [];
+
+				const inherited_note = sb.inherited_from
+					? `<div class="sw-note">Inherited from Base Style ${frappe.utils.escape_html(sb.inherited_from)}</div>`
+					: "";
+
+				let tbl;
+				if (lines.length) {
+					tbl = `<table><thead><tr><th>Section</th><th>Item</th><th class="sw-num">Base qty</th><th style="width:70px">UOM</th><th>Varies</th></tr></thead><tbody>`;
+					lines.forEach(l => {
+						const varies = [l.varies_by_colour ? "Colour" : null, l.varies_by_size ? "Size" : null].filter(Boolean).join(" + ") || "-";
+						tbl += `<tr>
+							<td>${frappe.utils.escape_html(l.section || "")}</td>
+							<td>${frappe.utils.escape_html(l.item || "")}</td>
+							<td class="sw-num">${l.base_consumption != null ? l.base_consumption : ""}</td>
+							<td>${frappe.utils.escape_html(l.uom || "")}</td>
+							<td>${frappe.utils.escape_html(varies)}</td>
+						</tr>`;
+					});
+					tbl += `</tbody></table>`;
+				} else {
+					tbl = `<div class="sw-empty">No lines on this Style BOM yet.</div>`;
+				}
+
+				$summary.html(`
+					<div><b>${frappe.utils.escape_html(sb.name)}</b> - v${sb.version} - <span class="sw-pill ${sb.bom_type === "Bulk" ? "" : "sw-pill-mut"}">${frappe.utils.escape_html(sb.bom_type)}</span></div>
+					${inherited_note}
+					${tbl}
+					<button class="sw-btn sw-btn-pri" id="swOpenBom" style="margin-top:8px">Open Style BOM to edit</button>
+				`);
+				$summary.find("#swOpenBom").on("click", () => {
+					frappe.set_route("Form", "Style BOM", sb.name);
+				});
 			});
 		});
 	}
