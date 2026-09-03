@@ -383,11 +383,10 @@ function render_production(frm, snapshot) {
 			<div class="tp-prod-colours" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">`;
 		
 		colours.forEach(c => {
-			const checked = c.approved_for_production ? "checked" : "disabled";
-			const disabled = c.approved_for_production ? "" : "disabled";
-			html += `<label class="tp-prod-colour-label" ${disabled ? 'style="opacity:0.5;"' : ''}>
-				<input type="checkbox" class="tp-prod-colour-check" value="${frappe.utils.escape_html(c.colour_name)}" ${checked}>
-				<span class="tp-swatch-box" style="background:${c.swatch || '#eee'};width:32px;height:32px;display:inline-block;border-radius:4px;margin-right:6px;border:2px solid ${checked ? 'var(--primary)' : 'transparent'};"></span>
+			const is_approved = !!c.approved_for_production;
+			html += `<label class="tp-prod-colour-label">
+				<input type="checkbox" class="tp-prod-colour-check" value="${frappe.utils.escape_html(c.colour_name)}" ${is_approved ? "checked" : ""}>
+				<span class="tp-swatch-box" style="background:${c.swatch || '#eee'};width:32px;height:32px;display:inline-block;border-radius:4px;margin-right:6px;border:2px solid ${is_approved ? 'var(--primary)' : 'transparent'};"></span>
 				<span>${frappe.utils.escape_html(c.colour_name)}</span>
 			</label>`;
 		});
