@@ -437,15 +437,28 @@ def confirm_production_selection(name, colours=None, sizes=None):
 	if not colours or not sizes:
 		frappe.throw(_("Please select at least one colour and one size."))
 	
-	# Mark as confirmed
+	# Selecting a colour in this wizard IS the approval - set it on the Style
+	# so sync_matrix_rows() creates matrix rows for anything newly selected
+	# here that wasn't already approved elsewhere. This MUST happen before
+	# Design Tech Pack is marked confirmed below - Style.validate() locks
+	# colour edits once production_confirmed is set, so doing this after
+	# would throw on this very save.
+	style_doc = frappe.get_doc("Style", doc.style)
+	active_colours = [c for c in style_doc.colours if (c.status or "Active") == "Active"]
+	for c in active_colours:
+		c.approved_for_production = 1 if c.colour_name in colours else 0
+	style_doc.save(ignore_permissions=True)
+
+	# Now mark the Design Tech Pack as confirmed - colours are locked from here on.
 	doc.production_confirmed = 1
 	doc.add_comment("Info", _("Production selection confirmed. Selected colours: {0}, Sizes: {1}").format(
 		", ".join(colours), ", ".join(sizes)
 	))
 	doc.save(ignore_permissions=True)
-	
-	# Update the linked Style's matrix items to mark selected combinations for production
-	style_doc = frappe.get_doc("Style", doc.style)
+
+	# Update the linked Style's matrix items to mark selected combinations for production.
+	# Safe to save again here: only matrix_items changes, and the colour-lock
+	# only checks colours/sizes, not matrix_items.
 	for row in style_doc.matrix_items:
 		row.production_for_sku = 1 if (row.colour in colours and row.size in sizes) else 0
 	
