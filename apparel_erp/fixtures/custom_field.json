@@ -1,6 +1,7 @@
 [
  {
   "doctype": "Custom Field",
+  "name": "BOM-custom_style",
   "dt": "BOM",
   "fieldname": "custom_style",
   "label": "Style",
@@ -14,6 +15,7 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "BOM-custom_style_bom",
   "dt": "BOM",
   "fieldname": "custom_style_bom",
   "label": "Style BOM",
@@ -27,6 +29,7 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "BOM-custom_style_bom_version",
   "dt": "BOM",
   "fieldname": "custom_style_bom_version",
   "label": "Style BOM Version",
@@ -38,6 +41,7 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "BOM-custom_colourway",
   "dt": "BOM",
   "fieldname": "custom_colourway",
   "label": "Colourway",
