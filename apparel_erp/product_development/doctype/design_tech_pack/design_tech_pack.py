@@ -1,9 +1,12 @@
 import frappe
 from frappe.model.document import Document
-from frappe.utils import now_datetime
+from frappe.utils import flt, now_datetime
 from frappe import _
 from apparel_erp.product_development.doctype.style.style import advance_stage_at_least
-from apparel_erp.product_development.doctype.style_bom.style_bom import find_workspace_style_bom
+from apparel_erp.product_development.doctype.style_bom.style_bom import (
+	find_workspace_style_bom,
+	get_item_rate,
+)
 
 
 class DesignTechPack(Document):
@@ -71,7 +74,14 @@ def get_style_snapshot(style):
 				item_meta[i.name] = i
 		for row in sb_doc.lines:
 			meta = item_meta.get(row.item, {})
+			# Same source-of-truth rule as costing (cost_bom_lines): the
+			# Style BOM line's own rate wins once set, else fall back to the
+			# Item master. Previously no rate was sent here at all, so this
+			# tab could never show - or stay in sync with - a price edited
+			# on the Style BOM/Costing tabs.
+			rate = flt(row.rate) or flt(get_item_rate(row.item))
 			bom_items.append({
+				"line_id": row.line_id,
 				"item_type": row.section,
 				"item_name": meta.get("item_name") or row.item,
 				"description": meta.get("description") or "",
@@ -80,6 +90,7 @@ def get_style_snapshot(style):
 				"consumption": f"{row.base_consumption} {row.uom}" if row.base_consumption else "",
 				"uom": row.uom,
 				"base_qty": row.base_consumption,
+				"rate": rate,
 				"tolerance": "",
 				"available_in_market": 1,
 			})
@@ -98,6 +109,8 @@ def get_style_snapshot(style):
 		}
 		for row in style_doc.matrix_items
 	]
+
+	sb_editable = bool(sb_doc and sb_doc.docstatus == 0 and not _inherited)
 
 	return {
 		"style_fields": {
@@ -127,6 +140,7 @@ def get_style_snapshot(style):
 		"colours": colours,
 		"sizes": sizes,
 		"bom_items": bom_items,
+		"bom_editable": sb_editable,
 		"matrix_items": matrix_items
 	}
 
