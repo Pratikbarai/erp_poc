@@ -162,9 +162,13 @@ def get_workspace_cost_sheet(style):
 		frappe.throw(_("Not permitted to read Style {0}").format(style))
 
 	doc = _get_or_create_draft_cost_sheet(style)
-	bom_meta = _bom_meta(style, doc.style_bom)
-	if not doc.style_bom and bom_meta:
-		doc.style_bom = bom_meta["name"]
+
+	if doc.docstatus == 0:
+		bom_meta = _bom_meta(style)
+		if bom_meta and doc.style_bom != bom_meta["name"]:
+			doc.style_bom = bom_meta["name"]
+	else:
+		bom_meta = _bom_meta(style, doc.style_bom)
 
 	bom_costs = {"fabric_amount": 0, "trims_amount": 0, "fabric_qty": 0, "fabric_rate": 0}
 	if doc.style_bom and frappe.db.exists("Style BOM", doc.style_bom):
@@ -197,7 +201,7 @@ def save_workspace_cost_sheet(style, payload=None):
 		if field in payload:
 			setattr(doc, field, payload.get(field))
 
-	bom_meta = _bom_meta(style, payload.get("style_bom") or doc.style_bom)
+	bom_meta = _bom_meta(style)
 	if bom_meta:
 		doc.style_bom = bom_meta["name"]
 
