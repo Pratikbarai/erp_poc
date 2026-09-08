@@ -1,0 +1,292 @@
+{
+  "doctype": "DocType",
+  "name": "Style",
+  "module": "Product Development",
+  "fields": [
+    {
+      "fieldname": "tab_style_overview",
+      "fieldtype": "Tab Break",
+      "label": "Style Overview",
+      "is_custom_field": false
+    },
+    {
+      "fieldname": "col_image",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "style_image",
+      "fieldtype": "Attach Image",
+      "label": "Style Image"
+    },
+    {
+      "fieldname": "gallery_html",
+      "fieldtype": "HTML",
+      "description": "Click a thumbnail to set it as the main Style Image."
+    },
+    {
+      "fieldname": "gallery",
+      "fieldtype": "Table",
+      "label": "Gallery",
+      "options": "Style Gallery Image",
+      "hidden": 1
+    },
+    {
+      "fieldname": "col_left",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "style_no",
+      "fieldtype": "Data",
+      "label": "Style No",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "base_style",
+      "fieldtype": "Link",
+      "label": "Base Style",
+      "options": "Style",
+      "description": "Optional parent Style whose BOM materials are used when this Style has no own BOM."
+    },
+    {
+      "fieldname": "style_name",
+      "fieldtype": "Data",
+      "label": "Style Name",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+      {
+      "fieldname": "company",
+      "fieldtype": "Link",
+      "label": "Company",
+      "options": "Company",
+      "reqd": 1
+      },
+    {
+      "fieldname": "product_type",
+      "fieldtype": "Select",
+      "label": "Product Type",
+      "options": "Shirt\nT-Shirt\nTrouser\nDress\nJacket\nSkirt"
+    },
+    {
+      "fieldname": "category",
+      "fieldtype": "Data",
+      "label": "Category"
+    },
+    {
+      "fieldname": "season",
+      "fieldtype": "Data",
+      "label": "Season"
+    },
+    {
+      "fieldname": "launch_date",
+      "fieldtype": "Date",
+      "label": "Launch Date"
+    },
+    {
+      "fieldname": "col_mid",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "customer_brand",
+      "fieldtype": "Data",
+      "label": "Customer / Brand"
+    },
+    {
+      "fieldname": "designer",
+      "fieldtype": "Data",
+      "label": "Designer"
+    },
+    {
+      "fieldname": "merchandiser",
+      "fieldtype": "Data",
+      "label": "Merchandiser"
+    },
+    {
+      "fieldname": "department",
+      "fieldtype": "Select",
+      "label": "Department",
+      "options": "Design\nMerchandising\nProduction\nSampling"
+    },
+    {
+      "fieldname": "country_of_origin",
+      "fieldtype": "Data",
+      "label": "Country of Origin"
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Not Started\nIn Progress\nCompleted",
+      "default": "Not Started",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "style_stage_status",
+      "fieldtype": "Select",
+      "label": "Style Stage",
+      "options": "Draft\nDevelopment\nCosted\nConfirmed\nIn Production\nClosed\nDropped",
+      "default": "Draft",
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "description": "Commercial lifecycle stage. Must be 'Confirmed' before Bulk Style BOM generation is allowed - see Style BOM gates."
+    },
+    {
+      "fieldname": "col_desc",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "description",
+      "fieldtype": "Small Text",
+      "label": "Description"
+    },
+    {
+      "fieldname": "sb_attrs",
+      "fieldtype": "Section Break",
+      "label": "Style Attributes"
+    },
+    {
+      "fieldname": "col_attr1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "fit",
+      "fieldtype": "Data",
+      "label": "Fit"
+    },
+    {
+      "fieldname": "sleeve",
+      "fieldtype": "Data",
+      "label": "Sleeve"
+    },
+    {
+      "fieldname": "placket",
+      "fieldtype": "Data",
+      "label": "Placket"
+    },
+    {
+      "fieldname": "col_attr2",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "collar",
+      "fieldtype": "Data",
+      "label": "Collar"
+    },
+    {
+      "fieldname": "gender",
+      "fieldtype": "Select",
+      "label": "Gender",
+      "options": "Women\nMen\nUnisex\nKids"
+    },
+    {
+      "fieldname": "fabric_type",
+      "fieldtype": "Data",
+      "label": "Fabric Type"
+    },
+    {
+      "fieldname": "colours",
+      "fieldtype": "Table",
+      "label": "Colours",
+      "options": "Style Colour"
+    },
+    {
+      "fieldname": "sizes",
+      "fieldtype": "Table MultiSelect",
+      "label": "Sizes",
+      "options": "Style Size",
+      "description": "Select all sizes this style is offered in. The Colour \u00d7 Size matrix on the Matrix tab rebuilds automatically."
+    },
+    {
+      "fieldname": "size_chart",
+      "fieldtype": "Attach",
+      "label": "Size Chart",
+      "description": "PDF or image shown via the Size Chart button, here and on the Design & Tech Pack."
+    },
+    {
+      "fieldname": "sb_style_bom",
+      "fieldtype": "Section Break",
+      "label": "Style BOM"
+    },
+    {
+      "fieldname": "style_bom_html",
+      "fieldtype": "HTML",
+      "label": "Current Style BOM"
+    },
+    {
+      "fieldname": "tab_production",
+      "fieldtype": "Tab Break",
+      "label": "Production"
+    },
+    {
+      "fieldname": "development_stage",
+      "fieldtype": "Select",
+      "label": "Development Stage",
+      "options": "Style Created\nDesign & Tech Pack\nSampling\nFit Approval\nProto Approval\nProduction",
+      "default": "Style Created",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "workflow_html",
+      "fieldtype": "HTML",
+      "label": "Development Workflow"
+    },
+    {
+      "fieldname": "sb_production_readiness",
+      "fieldtype": "Section Break",
+      "label": "Production Readiness"
+    },
+    {
+      "fieldname": "production_readiness_html",
+      "fieldtype": "HTML",
+      "label": "Production Status Overview"
+    },
+    {
+      "fieldname": "sb_production_matrix",
+      "fieldtype": "Section Break",
+      "label": "Colour × Size Matrix"
+    },
+    {
+      "fieldname": "matrix_html",
+      "fieldtype": "HTML",
+      "label": "SKU Generation Matrix"
+    },
+    {
+      "fieldname": "matrix_items",
+      "fieldtype": "Table",
+      "label": "Matrix Items (Generated)",
+      "options": "Style Matrix Item",
+      "read_only": 1,
+      "hidden": 1
+    }
+  ],
+  "modules": [],
+  "is_submittable": 0,
+  "autoname": "field:style_no",
+  "naming_rule": "By fieldname",
+  "engine": "InnoDB",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "image_field": "style_image",
+  "title_field": "style_name",
+  "track_changes": 1,
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "submit": 0
+    },
+    {
+      "role": "Manufacturing Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1
+    }
+  ]
+}

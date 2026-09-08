@@ -1,0 +1,33 @@
+{
+ "doctype": "DocType",
+ "name": "Style Submission",
+ "module": "Product Development",
+ "is_submittable": 1,
+ "autoname": "format:SUB-{style}-{#####}",
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "style", "fieldtype": "Link", "label": "Style", "options": "Style", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "submission_type", "fieldtype": "Select", "label": "Submission Type", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1,
+   "options": "Lab Dip\nStrike-off\nYarn Dip\nFabric Swatch\nTrim Card\nProto\nFit\nSalesman\nSize Set\nPP\nSealed\nTOP\nShipment"},
+  {"fieldname": "cb1", "fieldtype": "Column Break"},
+  {"fieldname": "colourway", "fieldtype": "Data", "label": "Colourway", "in_list_view": 1, "description": "e.g. Lab Dip - per colourway. Leave blank for style-wide submissions like PP."},
+  {"fieldname": "size", "fieldtype": "Data", "label": "Size", "in_list_view": 1, "description": "e.g. Size Set. Leave blank when not size-specific."},
+  {"fieldname": "sb_ref", "fieldtype": "Section Break", "label": "Reference"},
+  {"fieldname": "revision_no", "fieldtype": "Int", "label": "Revision No", "default": "1"},
+  {"fieldname": "style_bom_version", "fieldtype": "Int", "label": "Style BOM Version", "description": "Which Style BOM version this submission is judged against. A Fit comment against v2 is meaningless if the record silently became v3 - always set this explicitly."},
+  {"fieldname": "cb2", "fieldtype": "Column Break"},
+  {"fieldname": "sent_date", "fieldtype": "Date", "label": "Sent Date"},
+  {"fieldname": "response_date", "fieldtype": "Date", "label": "Response Date"},
+  {"fieldname": "sb_status", "fieldtype": "Section Break", "label": "Status"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Pending\nApproved\nApproved with comments\nRejected", "default": "Pending", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "cb3", "fieldtype": "Column Break"},
+  {"fieldname": "blocks_bulk", "fieldtype": "Check", "label": "Blocks Bulk Generation", "default": 1, "description": "Whether this submission gates BOM generation. PP and Lab Dip should stay checked - informational submission types (Shipment, TOP) can be unchecked."},
+  {"fieldname": "sb_comments", "fieldtype": "Section Break", "label": "Buyer Comments"},
+  {"fieldname": "buyer_comments", "fieldtype": "Text"},
+  {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Style Submission", "read_only": 1, "no_copy": 1, "print_hide": 1}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "amend": 1, "delete": 1},
+  {"role": "Manufacturing Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "amend": 1}
+ ]
+}

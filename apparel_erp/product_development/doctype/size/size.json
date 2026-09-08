@@ -1,0 +1,22 @@
+{
+ "doctype": "DocType",
+ "name": "Size",
+ "module": "Product Development",
+ "autoname": "field:size_name",
+ "naming_rule": "By fieldname",
+ "engine": "InnoDB",
+ "is_submittable": 0,
+ "istable": 0,
+ "editable_grid": 1,
+ "sort_field": "sequence",
+ "sort_order": "ASC",
+ "fields": [
+  {"fieldname": "size_name", "fieldtype": "Data", "label": "Size Name", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "size_code", "fieldtype": "Data", "label": "Size Code", "description": "Used in SKU generation, e.g. S, M, L, XL", "in_list_view": 1},
+  {"fieldname": "sequence", "fieldtype": "Int", "label": "Sort Sequence", "default": "0"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Manufacturing Manager", "read": 1, "write": 1, "create": 1}
+ ]
+}

@@ -1,0 +1,39 @@
+{
+ "doctype": "DocType",
+ "name": "Style Cost Sheet",
+ "module": "Product Development",
+ "is_submittable": 1,
+ "autoname": "format:COST-{style}-{#####}",
+ "engine": "InnoDB",
+ "track_changes": 1,
+ "fields": [
+  {"fieldname": "style", "fieldtype": "Link", "label": "Style", "options": "Style", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "style_bom", "fieldtype": "Link", "label": "Style BOM", "options": "Style BOM", "in_list_view": 1},
+  {"fieldname": "cb1", "fieldtype": "Column Break"},
+  {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Style Cost Sheet", "read_only": 1, "no_copy": 1, "print_hide": 1},
+  {"fieldname": "sb_commercial", "fieldtype": "Section Break", "label": "Commercial"},
+  {"fieldname": "currency", "fieldtype": "Select", "label": "Currency", "options": "INR\nUSD", "default": "INR"},
+  {"fieldname": "target_margin", "fieldtype": "Percent", "label": "Target Margin %", "default": "18"},
+  {"fieldname": "cb2", "fieldtype": "Column Break"},
+  {"fieldname": "buyer_target", "fieldtype": "Currency", "label": "Buyer Target", "options": "currency"},
+  {"fieldname": "sb_rates", "fieldtype": "Section Break", "label": "Rates"},
+  {"fieldname": "cmt_rate", "fieldtype": "Currency", "label": "Cut, Make & Trim / pc", "options": "currency", "default": "0"},
+  {"fieldname": "testing_logistics", "fieldtype": "Currency", "label": "Testing & Logistics / pc", "options": "currency", "default": "0"},
+  {"fieldname": "cb3", "fieldtype": "Column Break"},
+  {"fieldname": "overhead_pct", "fieldtype": "Percent", "label": "Overhead %", "default": "8"},
+  {"fieldname": "sb_computed", "fieldtype": "Section Break", "label": "Computed"},
+  {"fieldname": "fabric_amount", "fieldtype": "Currency", "label": "Main Fabric", "options": "currency", "read_only": 1},
+  {"fieldname": "trims_amount", "fieldtype": "Currency", "label": "Trims & Packing", "options": "currency", "read_only": 1},
+  {"fieldname": "cmt_amount", "fieldtype": "Currency", "label": "CMT Amount", "options": "currency", "read_only": 1},
+  {"fieldname": "testing_amount", "fieldtype": "Currency", "label": "Testing Amount", "options": "currency", "read_only": 1},
+  {"fieldname": "overhead_amount", "fieldtype": "Currency", "label": "Overhead Amount", "options": "currency", "read_only": 1},
+  {"fieldname": "cb4", "fieldtype": "Column Break"},
+  {"fieldname": "total_cost", "fieldtype": "Currency", "label": "Total Cost", "options": "currency", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "selling_price", "fieldtype": "Currency", "label": "Suggested Selling Price", "options": "currency", "read_only": 1}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "amend": 1, "delete": 1},
+  {"role": "Manufacturing Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "amend": 1}
+ ]
+}

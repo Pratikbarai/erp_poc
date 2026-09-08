@@ -1,0 +1,27 @@
+{
+ "doctype": "DocType",
+ "name": "Style BOM Item",
+ "module": "Product Development",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "item_type", "fieldtype": "Select", "label": "Item Type", "options": "Fabric\nTrim\nPackaging", "reqd": 1, "in_list_view": 1},
+    {"fieldname": "item_name", "fieldtype": "Data", "label": "Item Name / Description", "in_list_view": 1},
+    {"fieldname": "raw_material", "fieldtype": "Link", "label": "Selected Item", "options": "Item", "hidden": 1, "in_list_view": 0},
+    {"fieldname": "new_item_code", "fieldtype": "Data", "label": "New Item Code", "in_list_view": 0},
+  {"fieldname": "uom", "fieldtype": "Link", "label": "UOM", "options": "UOM", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "base_qty", "fieldtype": "Float", "label": "Base Qty", "reqd": 1, "in_list_view": 1, "precision": "3"},
+  {"fieldname": "tolerance", "fieldtype": "Data", "label": "Tolerance", "in_list_view": 1},
+  {"fieldname": "description", "fieldtype": "Data", "label": "Description", "description": "e.g. Cotton Poplin 120 GSM, 11 Lines Plastic Button"},
+  {"fieldname": "composition", "fieldtype": "Data", "label": "Composition", "description": "e.g. 100% Cotton - fabric rows only"},
+  {"fieldname": "gsm", "fieldtype": "Data", "label": "GSM", "description": "Fabric rows only"},
+  {"fieldname": "consumption", "fieldtype": "Data", "label": "Consumption", "description": "Shown as-is on the Tech Pack, e.g. '1.65 m' or '7 Nos'"},
+  {"fieldname": "available_in_market", "fieldtype": "Check", "label": "Available in Market", "default": 1, "in_list_view": 1, "description": "Uncheck if this material is not available in market"},
+  {"fieldname": "line_id", "fieldtype": "Data", "label": "Line ID", "read_only": 1, "hidden": 1, "description": "Stable identifier generated on insert. Used to join Style BOM Override rows to this line. Never recomputed - do not edit."},
+  {"fieldname": "varies_by_colour", "fieldtype": "Check", "label": "Varies by Colour", "default": 0, "in_list_view": 1, "description": "Item code changes per colourway (e.g. body fabric, thread). Invariant lines (labels, packing) leave unchecked."},
+  {"fieldname": "varies_by_size", "fieldtype": "Check", "label": "Varies by Size", "default": 0, "in_list_view": 1, "description": "Quantity (or item code) changes per size (e.g. fabric consumption, elastic length)."},
+  {"fieldname": "resolution_rule", "fieldtype": "Select", "label": "Resolution Rule", "options": "Fixed\nMatch garment colour\nExplicit Override", "default": "Fixed", "description": "Fixed: always use Selected Item. Match garment colour: auto-resolve to the Colour-attribute variant of Selected Item unless an override says otherwise. Explicit Override: only a Style BOM Override row can change this line - no auto-matching."}
+ ],
+ "permissions": []
+}

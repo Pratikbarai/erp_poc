@@ -1,0 +1,17 @@
+{
+ "doctype": "DocType",
+ "name": "Style BOM Override",
+ "module": "Product Development",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "line_id", "fieldtype": "Data", "label": "BOM Line", "reqd": 1, "in_list_view": 1, "description": "Matches Style BOM Item.line_id. Pick the line this override applies to."},
+  {"fieldname": "colourway", "fieldtype": "Data", "label": "Colourway Code", "in_list_view": 1, "description": "Blank = applies to all colourways for this line."},
+  {"fieldname": "size", "fieldtype": "Data", "label": "Size Code", "in_list_view": 1, "description": "Blank = applies to all sizes for this line."},
+  {"fieldname": "item_code", "fieldtype": "Link", "label": "Override Item", "options": "Item", "in_list_view": 1, "description": "Leave blank unless this exact colourway/size combination needs a different material than auto-resolution would pick."},
+  {"fieldname": "consumption", "fieldtype": "Float", "label": "Override Consumption", "precision": "3", "in_list_view": 1, "description": "Leave blank to use the line's Base Qty."},
+  {"fieldname": "note", "fieldtype": "Data", "label": "Note", "description": "Why this exception exists, e.g. 'Maroon uses Black rib, not auto-matched Maroon rib'."}
+ ],
+ "permissions": []
+}

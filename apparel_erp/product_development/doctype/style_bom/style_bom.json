@@ -1,0 +1,28 @@
+{
+ "doctype": "DocType",
+ "name": "Style BOM",
+ "module": "Product Development",
+ "is_submittable": 1,
+ "autoname": "format:BOM-{style}-{#####}",
+ "engine": "InnoDB",
+ "track_changes": 1,
+ "fields": [
+  {"fieldname": "style", "fieldtype": "Link", "label": "Style", "options": "Style", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "bom_type", "fieldtype": "Select", "label": "BOM Type", "options": "Development\nBulk", "default": "Development", "reqd": 1, "in_list_view": 1, "description": "Only Bulk may generate native production BOMs. Development is for costing/sampling before the design is locked."},
+  {"fieldname": "cb1", "fieldtype": "Column Break"},
+  {"fieldname": "version", "fieldtype": "Int", "label": "Version", "read_only": 1, "in_list_view": 1, "description": "1 on first submit. Incremented on each amend."},
+  {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Style BOM", "read_only": 1, "no_copy": 1, "print_hide": 1},
+  {"fieldname": "sb_lines", "fieldtype": "Section Break", "label": "Lines"},
+  {"fieldname": "lines", "fieldtype": "Table", "label": "Style BOM Line", "options": "Style BOM Line"},
+  {"fieldname": "sb_overrides", "fieldtype": "Section Break", "label": "Overrides (exceptions only)"},
+  {"fieldname": "overrides", "fieldtype": "Table", "label": "Style BOM Override", "options": "Style BOM Override", "description": "Only add a row when a specific colourway/size needs to deviate from a line's base value."},
+  {"fieldname": "sb_operations", "fieldtype": "Section Break", "label": "Operations (SMV)"},
+  {"fieldname": "operations", "fieldtype": "Table", "label": "Style BOM Operation", "options": "Style BOM Operation"},
+  {"fieldname": "sb_gen", "fieldtype": "Section Break", "label": "Generation"},
+  {"fieldname": "generation_html", "fieldtype": "HTML", "label": "Generated Production BOMs"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "amend": 1, "delete": 1},
+  {"role": "Manufacturing Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "amend": 1}
+ ]
+}

@@ -1,0 +1,16 @@
+{
+ "doctype": "DocType",
+ "name": "Tech Pack Callout",
+ "module": "Product Development",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "sequence", "fieldtype": "Int", "label": "#", "in_list_view": 1, "description": "Pin number shown on the sketch"},
+  {"fieldname": "text", "fieldtype": "Data", "label": "Construction Note", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "sketch", "fieldtype": "Select", "label": "Sketch", "options": "Front\nBack", "default": "Front", "in_list_view": 1},
+  {"fieldname": "x", "fieldtype": "Float", "label": "X (% from left)", "precision": "2", "in_list_view": 1},
+  {"fieldname": "y", "fieldtype": "Float", "label": "Y (% from top)", "precision": "2", "in_list_view": 1}
+ ],
+ "permissions": []
+}

@@ -1,0 +1,16 @@
+{
+ "doctype": "DocType",
+ "name": "Tech Pack Attachment",
+ "module": "Product Development",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "file", "fieldtype": "Attach", "label": "File", "reqd": 1},
+  {"fieldname": "file_name", "fieldtype": "Data", "label": "File Name", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "file_type", "fieldtype": "Data", "label": "File Type", "read_only": 1},
+  {"fieldname": "file_size", "fieldtype": "Int", "label": "File Size (bytes)", "read_only": 1},
+  {"fieldname": "remark", "fieldtype": "Data", "label": "Remark", "in_list_view": 1}
+ ],
+ "permissions": []
+}
