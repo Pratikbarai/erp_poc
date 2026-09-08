@@ -400,6 +400,7 @@ def serialize_style_bom(sb, style_doc, inherited_from=None):
 			"resolution_rule": row.resolution_rule or "Fixed",
 			"supplied_by": row.get("supplied_by") or "Us",
 			"position": row.position,
+			"rate": flt(row.rate),
 		})
 
 	overrides = []
@@ -642,6 +643,7 @@ def save_workspace_style_bom(style, payload=None):
 			"resolution_rule": rule,
 			"supplied_by": line.get("supplied_by") or "Us",
 			"position": line.get("position"),
+			"rate": flt(line.get("rate")),
 		})
 
 	line_ids = {row.line_id for row in sb.lines}

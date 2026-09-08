@@ -566,8 +566,9 @@ class StyleWorkspace {
 		} else {
 			lineTbl = `<table><thead><tr>
 				<th style="width:34px">#</th><th>Material</th><th style="width:110px">Rule</th>
-				<th style="width:70px">UOM</th><th class="sw-num" style="width:90px">Base qty</th>
-				<th style="width:100px">Supplied by</th>${editable ? `<th style="width:36px"></th>` : ""}
+				<th style="width:70px">UOM</th><th class="num" style="width:90px">Base qty</th>
+				<th style="width:100px">Rate</th>${editable ? `<th style="width:36px"></th>` : ""}
+				<th style="width:100px">Supplied by</th>
 			</tr></thead><tbody>`;
 			let n = 0;
 			grouped.forEach((g) => {
@@ -585,6 +586,7 @@ class StyleWorkspace {
 						<td><span class="pill ${rule.cls}">${rule.label}</span></td>
 						<td>${frappe.utils.escape_html(l.uom || "")}</td>
 						<td class="num">${l.base_consumption != null ? l.base_consumption : ""}</td>
+						${editable ? `<td><input class="sw-cell" data-rate-idx="${n}" type="number" step="0.01" min="0" value="${l.rate || 0}"></td>` : `<td>${l.rate || 0}</td>`}
 						<td>${supplied}</td>
 						${editable ? `<td><span class="sw-x" data-line="${frappe.utils.escape_html(l.line_id || "")}" title="Remove">&times;</span></td>` : ""}
 					</tr>`;
@@ -735,7 +737,7 @@ class StyleWorkspace {
 		});
 	}
 
-	collect_bom_payload($panels) {
+collect_bom_payload($panels) {
 		this.sync_size_factors($panels);
 		const bom = this.workspace_bom || {};
 		const size_factors = (bom.sizes || []).map((sz, i) => {
@@ -745,11 +747,17 @@ class StyleWorkspace {
 				consumption_factor: $inp.length ? Number($inp.val()) : (sz.consumption_factor != null ? sz.consumption_factor : 1)
 			};
 		});
+		const rate_indices = Array.from($panels.find(".sw-cell[data-rate-idx]")).map($inp => $inp.data("rate-idx"));
+		const rates = rate_indices.map(idx => {
+			const $inp = $panels.find(`[data-rate-idx="${idx}"]`);
+			return Number($inp.val()) || 0;
+		});
 		return {
 			bom_type: bom.bom_type || "Development",
 			lines: bom.lines || [],
 			overrides: bom.overrides || [],
-			size_factors
+			size_factors,
+			rates: rates.length ? rates : []
 		};
 	}
 
@@ -882,6 +890,7 @@ class StyleWorkspace {
 	paint_costing_tab($panels) {
 		const c = this.workspace_cost || {};
 		const editable = c.editable !== false;
+		const bom = this.workspace_bom || {};
 		const cur = c.currency === "USD" ? "$" : "₹";
 		const fmt = (n) => cur + Number(n || 0).toFixed(2);
 		const bomLabel = c.bom
@@ -916,7 +925,9 @@ $panels.html(`
 						<thead><tr><th>Cost head</th><th>Basis</th><th class="num">Rate</th><th class="num">Amount / pc</th></tr></thead>
 						<tbody>
 							<tr><td>Main fabric</td><td>${frappe.utils.escape_html(fabricBasis)}</td><td class="num">${c.fabric_rate ? fmt(c.fabric_rate) + " / uom" : "—"}</td><td class="num">${fmt(c.fabric_amount)}</td></tr>
-							<tr><td>Trims & packing</td><td>Style BOM ${frappe.utils.escape_html(bomLabel)}</td><td class="num">—</td><td class="num">${fmt(c.trims_amount)}</td></tr>
+							<tr><td>Trims & packing</td><td>Style BOM ${frappe.utils.escape_html(bomLabel)}</td><td class="num">${bom.rates && bom.rates.length ? fmt(bom.rates[0] || 0) + " / uom" : "—"}</td>
+								${editable ? `<td><input class="sw-cell" data-rate-idx="0" type="number" step="0.01" min="0" value="${bom.rates && bom.rates[0] !== undefined ? bom.rates[0] : 0}"></td>` : "<td></td>"}
+								<td class="num">${fmt(c.trims_amount)}</td></tr>
 							<tr><td>Cut, make & trim</td><td>Approved service rate</td><td class="num">${fmt(c.cmt_rate)} / pc</td><td class="num">${fmt(c.cmt_amount)}</td></tr>
 							<tr><td>Testing & logistics</td><td>Allocated per piece</td><td class="num">—</td><td class="num">${fmt(c.testing_amount)}</td></tr>
 							<tr><td>Overhead</td><td>${Number(c.overhead_pct || 0)}% of direct cost</td><td class="num">${Number(c.overhead_pct || 0)}%</td><td class="num">${fmt(c.overhead_amount)}</td></tr>
@@ -981,7 +992,8 @@ $panels.html(`
 			testing_logistics: Number($panels.find("#swTesting").val()),
 			overhead_pct: Number($panels.find("#swOverheadPct").val()),
 			buyer_target: Number($panels.find("#swBuyerTarget").val()),
-			style_bom: this.workspace_cost && this.workspace_cost.style_bom
+			style_bom: this.workspace_cost && this.workspace_cost.style_bom,
+			bom_rates: this.workspace_bom && this.workspace_bom.rates ? this.workspace_bom.rates : []
 		};
 	}
 
