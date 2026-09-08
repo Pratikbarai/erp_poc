@@ -667,6 +667,55 @@ def save_workspace_style_bom(style, payload=None):
 	return serialize_style_bom(sb, style_doc)
 
 
+@frappe.whitelist()
+def update_style_bom_rates(style, rates=None):
+	"""Write just the rate on specific Style BOM lines, keyed by line_id.
+
+	The Style BOM Line is the single source of truth for price - the BOM
+	tab, Costing tab and Design & Tech Pack tab all read it fresh on every
+	visit (see get_workspace_style_bom / get_workspace_cost_sheet /
+	get_style_snapshot), so writing here is enough to make an edit made
+	from any of those tabs show up on the others: the write happens once,
+	against one record, and every reader is already re-fetching that same
+	record rather than relying on a cached copy.
+	"""
+	import json
+
+	if rates is None:
+		rates = frappe.form_dict.get("rates")
+	if isinstance(rates, str):
+		rates = json.loads(rates)
+	if not rates:
+		frappe.throw(_("No rates supplied"))
+
+	if not frappe.has_permission("Style BOM", "write"):
+		frappe.throw(_("Not permitted to update Style BOM"))
+
+	sb, inherited_from = find_workspace_style_bom(style)
+	if not sb:
+		frappe.throw(_("No Style BOM found for {0}").format(style))
+	if inherited_from:
+		frappe.throw(_("This Style BOM is inherited from {0}. Create this style's own copy before editing.").format(inherited_from))
+	if sb.docstatus == 1:
+		frappe.throw(_("Submitted Style BOM {0} is read-only. Amend it on the Style BOM form to edit.").format(sb.name))
+
+	line_by_id = {row.line_id: row for row in sb.lines}
+	changed = False
+	for line_id, rate in rates.items():
+		row = line_by_id.get(line_id)
+		if row is None:
+			continue
+		row.rate = flt(rate)
+		changed = True
+
+	if changed:
+		sb.save(ignore_permissions=True)
+		frappe.db.commit()
+
+	style_doc = frappe.get_doc("Style", style)
+	return serialize_style_bom(sb, style_doc)
+
+
 def get_item_rate(item_code):
 	if not item_code or not frappe.db.exists("Item", item_code):
 		return 0
@@ -687,7 +736,12 @@ def cost_bom_lines(sb):
 	fabric_rate = 0
 	for line in sb.lines:
 		qty = flt(line.base_consumption) * (1 + flt(line.wastage_pct or 0) / 100.0)
-		rate = flt(get_item_rate(line.item))
+		# The Style BOM line's own rate (editable on the Style Workspace BOM
+		# tab) is the source of truth once set - it lets a user override the
+		# Item master price for this style. Only fall back to the Item's
+		# rate when no line-level rate has been entered, so costing doesn't
+		# silently ignore a price the user typed into the BOM.
+		rate = flt(line.rate) or flt(get_item_rate(line.item))
 		amount = qty * rate
 		if line.section == "Fabric":
 			fabric += amount
