@@ -748,8 +748,9 @@ collect_bom_payload($panels) {
 				consumption_factor: $inp.length ? Number($inp.val()) : (sz.consumption_factor != null ? sz.consumption_factor : 1)
 			};
 		});
-const rates = $panels.find(".sw-cell[data-rate-line]").map($inp => Number($inp.val()) || 0);			return Number($inp.val()) || 0;
-		});
+const rates = $panels.find(".sw-cell[data-rate-line]").map(function (i, el) {
+	return Number($(el).val()) || 0;
+}).get();
 		return {
 			bom_type: bom.bom_type || "Development",
 			lines: bom.lines || [],
