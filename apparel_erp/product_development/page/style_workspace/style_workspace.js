@@ -567,6 +567,7 @@ class StyleWorkspace {
 			lineTbl = `<table><thead><tr>
 				<th style="width:34px">#</th><th>Material</th><th style="width:110px">Rule</th>
 				<th style="width:70px">UOM</th><th class="num" style="width:90px">Base qty</th>
+				<th style="width:100px">Rate</th></th>
 				<th style="width:100px">Rate</th>${editable ? `<th style="width:36px"></th>` : ""}
 				<th style="width:100px">Supplied by</th>
 			</tr></thead><tbody>`;
@@ -586,7 +587,7 @@ class StyleWorkspace {
 						<td><span class="pill ${rule.cls}">${rule.label}</span></td>
 						<td>${frappe.utils.escape_html(l.uom || "")}</td>
 						<td class="num">${l.base_consumption != null ? l.base_consumption : ""}</td>
-						${editable ? `<td><input class="sw-cell" data-rate-idx="${n}" type="number" step="0.01" min="0" value="${l.rate || 0}"></td>` : `<td>${l.rate || 0}</td>`}
+						${editable ? `<td><input class="sw-cell" data-rate-line="${n}" type="number" step="0.01" min="0" value="${l.rate || 0}"></td>` : `<td>${l.rate || 0}</td>`}
 						<td>${supplied}</td>
 						${editable ? `<td><span class="sw-x" data-line="${frappe.utils.escape_html(l.line_id || "")}" title="Remove">&times;</span></td>` : ""}
 					</tr>`;
@@ -747,10 +748,7 @@ collect_bom_payload($panels) {
 				consumption_factor: $inp.length ? Number($inp.val()) : (sz.consumption_factor != null ? sz.consumption_factor : 1)
 			};
 		});
-		const rate_indices = Array.from($panels.find(".sw-cell[data-rate-idx]")).map($inp => $inp.data("rate-idx"));
-		const rates = rate_indices.map(idx => {
-			const $inp = $panels.find(`[data-rate-idx="${idx}"]`);
-			return Number($inp.val()) || 0;
+const rates = $panels.find(".sw-cell[data-rate-line]").map($inp => Number($inp.val()) || 0);			return Number($inp.val()) || 0;
 		});
 		return {
 			bom_type: bom.bom_type || "Development",
@@ -926,7 +924,7 @@ $panels.html(`
 						<tbody>
 							<tr><td>Main fabric</td><td>${frappe.utils.escape_html(fabricBasis)}</td><td class="num">${c.fabric_rate ? fmt(c.fabric_rate) + " / uom" : "—"}</td><td class="num">${fmt(c.fabric_amount)}</td></tr>
 							<tr><td>Trims & packing</td><td>Style BOM ${frappe.utils.escape_html(bomLabel)}</td><td class="num">${bom.rates && bom.rates.length ? fmt(bom.rates[0] || 0) + " / uom" : "—"}</td>
-								${editable ? `<td><input class="sw-cell" data-rate-idx="0" type="number" step="0.01" min="0" value="${bom.rates && bom.rates[0] !== undefined ? bom.rates[0] : 0}"></td>` : "<td></td>"}
+								${editable ? `<td><input class="sw-cell" data-rate-line="0" type="number" step="0.01" min="0" value="${bom.rates && bom.rates[0] !== undefined ? bom.rates[0] : 0}"></td>` : "<td></td>"}
 								<td class="num">${fmt(c.trims_amount)}</td></tr>
 							<tr><td>Cut, make & trim</td><td>Approved service rate</td><td class="num">${fmt(c.cmt_rate)} / pc</td><td class="num">${fmt(c.cmt_amount)}</td></tr>
 							<tr><td>Testing & logistics</td><td>Allocated per piece</td><td class="num">—</td><td class="num">${fmt(c.testing_amount)}</td></tr>
