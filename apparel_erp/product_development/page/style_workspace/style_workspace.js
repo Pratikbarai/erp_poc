@@ -567,7 +567,6 @@ class StyleWorkspace {
 			lineTbl = `<table><thead><tr>
 				<th style="width:34px">#</th><th>Material</th><th style="width:110px">Rule</th>
 				<th style="width:70px">UOM</th><th class="num" style="width:90px">Base qty</th>
-				<th style="width:100px">Rate</th></th>
 				<th style="width:100px">Rate</th>${editable ? `<th style="width:36px"></th>` : ""}
 				<th style="width:100px">Supplied by</th>
 			</tr></thead><tbody>`;
@@ -587,7 +586,7 @@ class StyleWorkspace {
 						<td><span class="pill ${rule.cls}">${rule.label}</span></td>
 						<td>${frappe.utils.escape_html(l.uom || "")}</td>
 						<td class="num">${l.base_consumption != null ? l.base_consumption : ""}</td>
-						${editable ? `<td><input class="sw-cell" data-rate-line="${n}" type="number" step="0.01" min="0" value="${l.rate || 0}"></td>` : `<td>${l.rate || 0}</td>`}
+						${editable ? `<td><input class="sw-cell" data-rate-line="${frappe.utils.escape_html(l.line_id || "")}" type="number" step="0.01" min="0" value="${l.rate || 0}"></td>` : `<td>${l.rate || 0}</td>`}
 						<td>${supplied}</td>
 						${editable ? `<td><span class="sw-x" data-line="${frappe.utils.escape_html(l.line_id || "")}" title="Remove">&times;</span></td>` : ""}
 					</tr>`;
@@ -748,15 +747,20 @@ collect_bom_payload($panels) {
 				consumption_factor: $inp.length ? Number($inp.val()) : (sz.consumption_factor != null ? sz.consumption_factor : 1)
 			};
 		});
-const rates = $panels.find(".sw-cell[data-rate-line]").map(function (i, el) {
-	return Number($(el).val()) || 0;
-}).get();
+		// Merge each Rate cell's current value back onto its line, matched by
+		// line_id (not row position - grouping/reordering can change that).
+		// Previously the typed value was only collected into a separate
+		// `rates` array that neither this payload's `lines` nor the server
+		// ever read, so price edits here never actually saved.
+		const lines = (bom.lines || []).map((l) => {
+			const $inp = $panels.find(`[data-rate-line="${l.line_id}"]`);
+			return $inp.length ? { ...l, rate: Number($inp.val()) || 0 } : l;
+		});
 		return {
 			bom_type: bom.bom_type || "Development",
-			lines: bom.lines || [],
+			lines,
 			overrides: bom.overrides || [],
-			size_factors,
-			rates: rates.length ? rates : []
+			size_factors
 		};
 	}
 
@@ -889,7 +893,6 @@ const rates = $panels.find(".sw-cell[data-rate-line]").map(function (i, el) {
 	paint_costing_tab($panels) {
 		const c = this.workspace_cost || {};
 		const editable = c.editable !== false;
-		const bom = this.workspace_bom || {};
 		const cur = c.currency === "USD" ? "$" : "₹";
 		const fmt = (n) => cur + Number(n || 0).toFixed(2);
 		const bomLabel = c.bom
@@ -924,9 +927,7 @@ $panels.html(`
 						<thead><tr><th>Cost head</th><th>Basis</th><th class="num">Rate</th><th class="num">Amount / pc</th></tr></thead>
 						<tbody>
 							<tr><td>Main fabric</td><td>${frappe.utils.escape_html(fabricBasis)}</td><td class="num">${c.fabric_rate ? fmt(c.fabric_rate) + " / uom" : "—"}</td><td class="num">${fmt(c.fabric_amount)}</td></tr>
-							<tr><td>Trims & packing</td><td>Style BOM ${frappe.utils.escape_html(bomLabel)}</td><td class="num">${bom.rates && bom.rates.length ? fmt(bom.rates[0] || 0) + " / uom" : "—"}</td>
-								${editable ? `<td><input class="sw-cell" data-rate-line="0" type="number" step="0.01" min="0" value="${bom.rates && bom.rates[0] !== undefined ? bom.rates[0] : 0}"></td>` : "<td></td>"}
-								<td class="num">${fmt(c.trims_amount)}</td></tr>
+							<tr><td>Trims & packing</td><td>Style BOM ${frappe.utils.escape_html(bomLabel)}</td><td class="num">${editable ? `<a href="#" id="swEditBomRate">Edit in Style BOM →</a>` : "—"}</td><td class="num">${fmt(c.trims_amount)}</td></tr>
 							<tr><td>Cut, make & trim</td><td>Approved service rate</td><td class="num">${fmt(c.cmt_rate)} / pc</td><td class="num">${fmt(c.cmt_amount)}</td></tr>
 							<tr><td>Testing & logistics</td><td>Allocated per piece</td><td class="num">—</td><td class="num">${fmt(c.testing_amount)}</td></tr>
 							<tr><td>Overhead</td><td>${Number(c.overhead_pct || 0)}% of direct cost</td><td class="num">${Number(c.overhead_pct || 0)}%</td><td class="num">${fmt(c.overhead_amount)}</td></tr>
@@ -991,12 +992,18 @@ $panels.html(`
 			testing_logistics: Number($panels.find("#swTesting").val()),
 			overhead_pct: Number($panels.find("#swOverheadPct").val()),
 			buyer_target: Number($panels.find("#swBuyerTarget").val()),
-			style_bom: this.workspace_cost && this.workspace_cost.style_bom,
-			bom_rates: this.workspace_bom && this.workspace_bom.rates ? this.workspace_bom.rates : []
+			style_bom: this.workspace_cost && this.workspace_cost.style_bom
 		};
 	}
 
 	bind_costing_tab($panels) {
+		// Trim/packing prices always live on the Style BOM - editing them
+		// here was silently discarded (see style_bom.js history), so always
+		// send the user to the Style BOM tab, the single source of truth.
+		$panels.find("#swEditBomRate").on("click", (e) => {
+			e.preventDefault();
+			this.switch_tab("bom");
+		});
 		$panels.find("#swOpenCostForm").on("click", () => {
 			if (this.workspace_cost && this.workspace_cost.name) {
 				frappe.set_route("Form", "Style Cost Sheet", this.workspace_cost.name);
@@ -1101,15 +1108,20 @@ $panels.html(`
 		const fabricRows = bomRows.filter(r => r.item_type === "Fabric");
 		const trimRows = bomRows.filter(r => r.item_type === "Trim" || r.item_type === "Packaging" || r.item_type === "Packing");
 
+		const bomEditable = !!(styleSnapshot && styleSnapshot.bom_editable);
+		const fmtRate = (n) => (n != null && n !== "" ? Number(n).toFixed(2) : "");
+		const rateCell = (r) => bomEditable
+			? `<input class="sw-cell" data-rate-line="${frappe.utils.escape_html(r.line_id || "")}" type="number" step="0.01" min="0" value="${r.rate || 0}">`
+			: fmtRate(r.rate);
 		const fabricTbl = fabricRows.length
-			? `<table><thead><tr><th>Item</th><th>Composition</th><th class="sw-num">GSM</th></tr></thead><tbody>
-				${fabricRows.map(r => `<tr><td>${frappe.utils.escape_html(r.item_name || "")}</td><td>${frappe.utils.escape_html(r.composition || "")}</td><td class="sw-num">${frappe.utils.escape_html(r.gsm || "")}</td></tr>`).join("")}
+			? `<table><thead><tr><th>Item</th><th>Composition</th><th class="sw-num">GSM</th><th class="sw-num">Rate</th></tr></thead><tbody>
+				${fabricRows.map(r => `<tr><td>${frappe.utils.escape_html(r.item_name || "")}</td><td>${frappe.utils.escape_html(r.composition || "")}</td><td class="sw-num">${frappe.utils.escape_html(r.gsm || "")}</td><td class="sw-num">${rateCell(r)}</td></tr>`).join("")}
 			</tbody></table>`
 			: `<div class="sw-empty">No Fabric rows on the Style BOM.</div>`;
 
 		const trimTbl = trimRows.length
-			? `<table><thead><tr><th>Trim</th><th>UOM</th><th class="sw-num">Base qty</th></tr></thead><tbody>
-				${trimRows.map(r => `<tr><td>${frappe.utils.escape_html(r.item_name || "")}</td><td>${frappe.utils.escape_html(r.uom || "")}</td><td class="sw-num">${r.base_qty != null ? r.base_qty : ""}</td></tr>`).join("")}
+			? `<table><thead><tr><th>Trim</th><th>UOM</th><th class="sw-num">Base qty</th><th class="sw-num">Rate</th></tr></thead><tbody>
+				${trimRows.map(r => `<tr><td>${frappe.utils.escape_html(r.item_name || "")}</td><td>${frappe.utils.escape_html(r.uom || "")}</td><td class="sw-num">${r.base_qty != null ? r.base_qty : ""}</td><td class="sw-num">${rateCell(r)}</td></tr>`).join("")}
 			</tbody></table>`
 			: `<div class="sw-empty">No Trim/Packaging rows on the Style BOM.</div>`;
 
@@ -1171,11 +1183,11 @@ $panels.html(`
 			</div>
 			<div class="sw-grid2">
 				<div class="sw-card">
-					<div class="sw-card-h"><h2>Fabric specification</h2></div>
+					<div class="sw-card-h"><h2>Fabric specification</h2>${bomEditable ? `<div class="sw-right"><button class="sw-btn sw-btn-sm sw-save-bom-rates">Save rates</button></div>` : ""}</div>
 					${fabricTbl}
 				</div>
 				<div class="sw-card">
-					<div class="sw-card-h"><h2>Trims &amp; accessories</h2></div>
+					<div class="sw-card-h"><h2>Trims &amp; accessories</h2>${bomEditable ? `<div class="sw-right"><button class="sw-btn sw-btn-sm sw-save-bom-rates">Save rates</button></div>` : ""}</div>
 					${trimTbl}
 				</div>
 			</div>
@@ -1195,6 +1207,7 @@ $panels.html(`
 			</div>
 		`);
 		this.tp = tp;
+		$panels.find(".sw-save-bom-rates").on("click", () => this.save_bom_rates_from_techpack($panels));
 		$panels.find("#swOpenTPForm").on("click", () => frappe.set_route("Form", "Design Tech Pack", tp.name));
 		$panels.find("#swOpenTPMeasurements").on("click", () => frappe.set_route("Form", "Design Tech Pack", tp.name));
 		$panels.find("#swUploadMeasurements").on("click", () => this.upload_measurements());
@@ -1334,6 +1347,35 @@ $panels.html(`
 					});
 				});
 			}
+		});
+	}
+
+	save_bom_rates_from_techpack($panels) {
+		// Writes straight to the Style BOM lines via update_style_bom_rates
+		// (same record the BOM tab edits), then re-renders this tab from a
+		// fresh server fetch and refreshes any BOM/Costing data already
+		// cached in memory - so a price typed here shows up immediately on
+		// the other tabs too, not just after they happen to reload later.
+		const rates = {};
+		$panels.find("[data-rate-line]").each((_, el) => {
+			const $el = $(el);
+			const lineId = $el.data("rate-line");
+			if (lineId) rates[lineId] = Number($el.val()) || 0;
+		});
+		if (!Object.keys(rates).length) return;
+
+		frappe.dom.freeze("Saving rates…");
+		frappe.call({
+			method: "apparel_erp.product_development.doctype.style_bom.style_bom.update_style_bom_rates",
+			args: { style: this.style.name, rates: JSON.stringify(rates) },
+			callback: (r) => {
+				frappe.dom.unfreeze();
+				if (this.workspace_bom) this.workspace_bom = r.message;
+				this.workspace_cost = null;
+				this.render_techpack_tab($panels);
+				sw_toast(this.wrapper, "Rates saved to the Style BOM.");
+			},
+			error: () => frappe.dom.unfreeze()
 		});
 	}
 
