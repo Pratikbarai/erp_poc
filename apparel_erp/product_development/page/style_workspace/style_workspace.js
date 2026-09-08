@@ -991,8 +991,7 @@ $panels.html(`
 			cmt_rate: Number($panels.find("#swCmtRate").val()),
 			testing_logistics: Number($panels.find("#swTesting").val()),
 			overhead_pct: Number($panels.find("#swOverheadPct").val()),
-			buyer_target: Number($panels.find("#swBuyerTarget").val()),
-			style_bom: this.workspace_cost && this.workspace_cost.style_bom
+			buyer_target: Number($panels.find("#swBuyerTarget").val())
 		};
 	}
 
