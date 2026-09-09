@@ -50,9 +50,14 @@ def compute_cost_amounts(doc, bom_costs=None):
 	trims = flt(bom_costs.get("trims_amount"))
 	cmt = flt(doc.cmt_rate)
 	testing = flt(doc.testing_logistics)
+	# User-added ad-hoc commercial line items (freight surcharge, sample
+	# fee, etc.) - as many as the user wants, added on the Costing tab.
+	# They're direct cost, same as CMT/testing, so they feed into overhead
+	# and total the same way.
+	extra = sum(flt(row.amount) for row in (doc.get("extra_items") or []))
 	overhead_pct = flt(doc.overhead_pct)
-	overhead = (fabric + trims + cmt + testing) * overhead_pct / 100.0
-	total = fabric + trims + cmt + testing + overhead
+	overhead = (fabric + trims + cmt + testing + extra) * overhead_pct / 100.0
+	total = fabric + trims + cmt + testing + extra + overhead
 	margin = flt(doc.target_margin)
 	selling = total / (1 - margin / 100.0) if margin < 100 else total
 	return {
@@ -60,6 +65,7 @@ def compute_cost_amounts(doc, bom_costs=None):
 		"trims_amount": trims,
 		"cmt_amount": cmt,
 		"testing_amount": testing,
+		"extra_items_amount": extra,
 		"overhead_amount": overhead,
 		"total_cost": total,
 		"selling_price": selling,
@@ -90,12 +96,17 @@ def serialize_cost_sheet(doc, bom_meta=None, tech_pack=None, bom_costs=None):
 		"trims_amount": doc.trims_amount,
 		"cmt_amount": doc.cmt_amount,
 		"testing_amount": doc.testing_amount,
+		"extra_items_amount": doc.extra_items_amount,
 		"overhead_amount": doc.overhead_amount,
 		"total_cost": doc.total_cost,
 		"selling_price": doc.selling_price,
 		"editable": doc.docstatus == 0,
 		"fabric_qty": bom_costs.get("fabric_qty") or 0,
 		"fabric_rate": bom_costs.get("fabric_rate") or 0,
+		"extra_items": [
+			{"name": row.name, "label": row.label, "amount": row.amount}
+			for row in (doc.get("extra_items") or [])
+		],
 		"bom": bom_meta,
 		"tech_pack": tech_pack,
 	}
@@ -200,6 +211,21 @@ def save_workspace_cost_sheet(style, payload=None):
 	for field in ("currency", "target_margin", "buyer_target", "cmt_rate", "testing_logistics", "overhead_pct"):
 		if field in payload:
 			setattr(doc, field, payload.get(field))
+
+	# Replace extra_items wholesale from the payload each save - the user
+	# can add/remove as many ad-hoc commercial line items as they want on
+	# the Costing tab, so the whole set is sent and rebuilt here rather
+	# than diffed row by row.
+	if "extra_items" in payload:
+		doc.set("extra_items", [])
+		for row in (payload.get("extra_items") or []):
+			label = (row.get("label") or "").strip()
+			if not label:
+				continue
+			doc.append("extra_items", {
+				"label": label,
+				"amount": flt(row.get("amount")),
+			})
 
 	bom_meta = _bom_meta(style)
 	if bom_meta:

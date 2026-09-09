@@ -908,10 +908,7 @@ collect_bom_payload($panels) {
 			: "Style BOM fabric lines";
 		const selling = Number(c.selling_price || 0);
 		const target = Number(c.buyer_target || 0);
-		const gap = selling - target;
-		const gapHtml = target
-			? `<span class="pill ${gap <= 0 ? "pill-ok" : "pill-warn"}" id="swTargetGap">${fmt(Math.abs(gap))} ${gap >= 0 ? "above" : "below"}</span>`
-			: `<span class="empty">No buyer target</span>`;
+		const gapHtml = gap_pill_html(fmt, selling, target);
 
 $panels.html(`
 			<div class="sw-grid2" style="grid-template-columns:1.6fr 1fr">
@@ -928,9 +925,10 @@ $panels.html(`
 						<tbody>
 							<tr><td>Main fabric</td><td>${frappe.utils.escape_html(fabricBasis)}</td><td class="num">${c.fabric_rate ? fmt(c.fabric_rate) + " / uom" : "—"}</td><td class="num">${fmt(c.fabric_amount)}</td></tr>
 							<tr><td>Trims & packing</td><td>Style BOM ${frappe.utils.escape_html(bomLabel)}</td><td class="num">${editable ? `<a href="#" id="swEditBomRate">Edit in Style BOM →</a>` : "—"}</td><td class="num">${fmt(c.trims_amount)}</td></tr>
-							<tr><td>Cut, make & trim</td><td>Approved service rate</td><td class="num">${fmt(c.cmt_rate)} / pc</td><td class="num">${fmt(c.cmt_amount)}</td></tr>
-							<tr><td>Testing & logistics</td><td>Allocated per piece</td><td class="num">—</td><td class="num">${fmt(c.testing_amount)}</td></tr>
-							<tr><td>Overhead</td><td>${Number(c.overhead_pct || 0)}% of direct cost</td><td class="num">${Number(c.overhead_pct || 0)}%</td><td class="num">${fmt(c.overhead_amount)}</td></tr>
+							<tr><td>Cut, make & trim</td><td>Approved service rate</td><td class="num">${fmt(c.cmt_rate)} / pc</td><td class="num" id="swCmtAmount">${fmt(c.cmt_amount)}</td></tr>
+							<tr><td>Testing & logistics</td><td>Allocated per piece</td><td class="num">—</td><td class="num" id="swTestingAmount">${fmt(c.testing_amount)}</td></tr>
+							<tr><td>Extra items</td><td><span id="swExtraCount">${(c.extra_items || []).length}</span> item(s) added below</td><td class="num">—</td><td class="num" id="swExtraTotalAmount">${fmt(c.extra_items_amount)}</td></tr>
+							<tr><td>Overhead</td><td>${Number(c.overhead_pct || 0)}% of direct cost</td><td class="num">${Number(c.overhead_pct || 0)}%</td><td class="num" id="swOverheadAmount">${fmt(c.overhead_amount)}</td></tr>
 							<tr><td><b>Total cost</b></td><td></td><td></td><td class="num"><b id="swTotalCost">${fmt(c.total_cost)}</b></td></tr>
 						</tbody>
 					</table>
@@ -961,8 +959,13 @@ $panels.html(`
 							<div class="f"><label>Buyer target</label>
 								<input id="swBuyerTarget" type="number" min="0" step="0.01" value="${c.buyer_target || 0}" ${editable ? "" : "readonly"}>
 							</div>
+							<div class="f" style="margin-top:4px">
+								<label>Extra items</label>
+								<div id="swExtraItems">${extraItemRows(c.extra_items, editable)}</div>
+								${editable ? `<button type="button" class="sw-btn sw-btn-sm" id="swAddExtraItem" style="margin-top:6px">+ Add item</button>` : ""}
+							</div>
 							<div class="attr"><span>Suggested selling price</span><strong id="swSellPrice">${fmt(selling)}</strong></div>
-							<div class="attr"><span>Gap to target</span>${gapHtml}</div>
+							<div class="attr"><span>Gap to target</span><span id="swGapWrap">${gapHtml}</span></div>
 						</div>
 					</div>
 					<div class="card">
@@ -985,17 +988,48 @@ $panels.html(`
 	}
 
 	collect_cost_payload($panels) {
+		const extra_items = [];
+		$panels.find(".sw-extra-row").each((_, el) => {
+			const $row = $(el);
+			const label = ($row.find(".sw-extra-label").val() || "").trim();
+			if (!label) return;
+			extra_items.push({
+				label,
+				amount: Number($row.find(".sw-extra-amount").val()) || 0
+			});
+		});
 		return {
 			currency: $panels.find("#swCostCurrency").val(),
 			target_margin: Number($panels.find("#swMarginPct").val()),
 			cmt_rate: Number($panels.find("#swCmtRate").val()),
 			testing_logistics: Number($panels.find("#swTesting").val()),
 			overhead_pct: Number($panels.find("#swOverheadPct").val()),
-			buyer_target: Number($panels.find("#swBuyerTarget").val())
+			buyer_target: Number($panels.find("#swBuyerTarget").val()),
+			extra_items
 		};
 	}
 
 	bind_costing_tab($panels) {
+		// Extra commercial line items: "+ Add item" appends a blank editable
+		// row client-side only (no server round trip needed just to add a
+		// row); Save/Recalculate below picks up whatever rows are currently
+		// in the DOM via collect_cost_payload and persists the whole set.
+		$panels.find("#swAddExtraItem").on("click", () => {
+			$panels.find("#swExtraItems").append(extraItemRowHtml({ label: "", amount: 0 }, true));
+			this.recalc_costing_preview($panels);
+		});
+		$panels.on("click", ".sw-extra-remove", (e) => {
+			$(e.currentTarget).closest(".sw-extra-row").remove();
+			this.recalc_costing_preview($panels);
+		});
+		// Live preview: every commercial input, and every extra item row,
+		// recomputes Overhead/Total/Selling price/Gap instantly in the UI -
+		// Save/Recalculate is still what persists it to the Style Cost
+		// Sheet, but the numbers on screen no longer wait for a round trip
+		// to reflect what's been typed.
+		$panels.on("input", "#swCmtRate, #swTesting, #swOverheadPct, #swMarginPct, #swBuyerTarget, .sw-extra-amount, .sw-extra-label", () => {
+			this.recalc_costing_preview($panels);
+		});
 		// Trim/packing prices always live on the Style BOM - editing them
 		// here was silently discarded (see style_bom.js history), so always
 		// send the user to the Style BOM tab, the single source of truth.
@@ -1045,6 +1079,46 @@ $panels.html(`
 				});
 			});
 		});
+	}
+
+	recalc_costing_preview($panels) {
+		// Mirrors compute_cost_amounts() in style_cost_sheet.py exactly, so
+		// what's shown here before Save matches what the server will store
+		// after Save. fabric/trims stay fixed (they come from the Style
+		// BOM, not from anything editable in this card); everything else
+		// is read straight from the current inputs and extra item rows.
+		const c = this.workspace_cost || {};
+		const cur = c.currency === "USD" ? "$" : "₹";
+		const fmt = (n) => cur + Number(n || 0).toFixed(2);
+
+		const fabric = Number(c.fabric_amount) || 0;
+		const trims = Number(c.trims_amount) || 0;
+		const cmt = Number($panels.find("#swCmtRate").val()) || 0;
+		const testing = Number($panels.find("#swTesting").val()) || 0;
+		let extraTotal = 0;
+		let extraCount = 0;
+		$panels.find(".sw-extra-row").each((_, el) => {
+			const $row = $(el);
+			const label = ($row.find(".sw-extra-label").val() || "").trim();
+			if (!label) return;
+			extraCount++;
+			extraTotal += Number($row.find(".sw-extra-amount").val()) || 0;
+		});
+		const overheadPct = Number($panels.find("#swOverheadPct").val()) || 0;
+		const overhead = (fabric + trims + cmt + testing + extraTotal) * overheadPct / 100.0;
+		const total = fabric + trims + cmt + testing + extraTotal + overhead;
+		const margin = Number($panels.find("#swMarginPct").val()) || 0;
+		const selling = margin < 100 ? total / (1 - margin / 100.0) : total;
+		const target = Number($panels.find("#swBuyerTarget").val()) || 0;
+
+		$panels.find("#swCmtAmount").text(fmt(cmt));
+		$panels.find("#swTestingAmount").text(fmt(testing));
+		$panels.find("#swExtraCount").text(extraCount);
+		$panels.find("#swExtraTotalAmount").text(fmt(extraTotal));
+		$panels.find("#swOverheadAmount").text(fmt(overhead));
+		$panels.find("#swTotalCost").text(fmt(total));
+		$panels.find("#swSellPrice").text(fmt(selling));
+		$panels.find("#swGapWrap").html(gap_pill_html(fmt, selling, target));
 	}
 
 	// ---------- Tech pack ----------
@@ -1482,6 +1556,36 @@ function sw_toast(wrapper, msg) {
 	$t.text(msg).addClass("on");
 	clearTimeout($t.data("tt"));
 	$t.data("tt", setTimeout(() => $t.removeClass("on"), 3200));
+}
+
+function extraItemRowHtml(row, editable) {
+	// row.name (a saved child row's docname) keys an existing row so a
+	// remove click can target it precisely; a freshly-added blank row (no
+	// name yet) gets a client-only key instead. Either way collect_cost_
+	// payload just reads whatever rows are currently in the DOM.
+	const key = row.name || row.key || ("new-" + frappe.utils.get_random(8));
+	const label = row.label ? frappe.utils.escape_html(row.label) : "";
+	const amount = row.amount != null ? row.amount : "";
+	return `<div class="sw-extra-row" data-row-key="${key}" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+		<input type="text" class="sw-cell sw-extra-label" placeholder="e.g. Freight surcharge" value="${label}" style="flex:2" ${editable ? "" : "readonly"}>
+		<input type="number" step="0.01" min="0" class="sw-cell sw-extra-amount" placeholder="0.00" value="${amount}" style="flex:1" ${editable ? "" : "readonly"}>
+		${editable ? `<button type="button" class="sw-btn sw-btn-sm sw-extra-remove" title="Remove item">×</button>` : ""}
+	</div>`;
+}
+
+function extraItemRows(items, editable) {
+	const rows = items && items.length ? items : [];
+	if (!rows.length) {
+		return editable ? "" : `<div class="sw-empty">No extra items.</div>`;
+	}
+	return rows.map(r => extraItemRowHtml(r, editable)).join("");
+}
+
+function gap_pill_html(fmt, selling, target) {
+	const gap = selling - target;
+	return target
+		? `<span class="pill ${gap <= 0 ? "pill-ok" : "pill-warn"}" id="swTargetGap">${fmt(Math.abs(gap))} ${gap >= 0 ? "above" : "below"}</span>`
+		: `<span class="empty">No buyer target</span>`;
 }
 
 function inject_sw_css() {
