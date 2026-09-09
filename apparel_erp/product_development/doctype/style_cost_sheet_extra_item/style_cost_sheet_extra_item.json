@@ -1,0 +1,26 @@
+{
+  "doctype": "DocType",
+  "name": "Style Cost Sheet Extra Item",
+  "module": "Product Development",
+  "istable": 1,
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "fields": [
+    {
+      "fieldname": "label",
+      "fieldtype": "Data",
+      "label": "Item",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "Free-text description of this commercial line item, e.g. 'Freight surcharge' or 'Sample fee'."
+    },
+    {
+      "fieldname": "amount",
+      "fieldtype": "Currency",
+      "label": "Amount / pc",
+      "options": "currency",
+      "in_list_view": 1
+    }
+  ],
+  "permissions": []
+}
