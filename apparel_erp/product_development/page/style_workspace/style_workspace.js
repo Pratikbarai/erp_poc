@@ -229,7 +229,7 @@ class StyleWorkspace {
 					<button data-t="bom" class="${this.active_tab === "bom" ? "on" : ""}">Style BOM</button>
 					<button data-t="techpack" class="${this.active_tab === "techpack" ? "on" : ""}">Tech pack</button>
 					<button data-t="costing" class="${this.active_tab === "costing" ? "on" : ""}">Costing</button>
-					<button data-t="tna" class="${this.active_tab === "tna" ? "on" : ""}">Time &amp; action</button>
+					<button data-t="tna" class="${this.active_tab === "tna" ? "on" : ""}">Time &amp; action${this.tna_count ? `<span class="sw-count">${this.tna_count}</span>` : ""}</button>
 					<button data-t="jobwork" class="${this.active_tab === "jobwork" ? "on" : ""}">Job work</button>
 				</div>
 			</div>
@@ -256,10 +256,7 @@ class StyleWorkspace {
 		else if (this.active_tab === "bom") { this.render_bom_tab($panels); }
 		else if (this.active_tab === "techpack") this.render_techpack_tab($panels);
 		else if (this.active_tab === "costing") { this.render_costing_tab($panels); }
-		else if (this.active_tab === "tna") $panels.html(this.tpl_preview_tab(
-			"Time & action isn't wired to a doctype yet.",
-			"This tab shows sample TNA data purely so the layout matches the prototype. Add a Time & Action doctype (activity, planned/revised/actual dates, variance, status) and this page can render live rows the same way the Colours & Sizes tab does."
-		));
+		else if (this.active_tab === "tna") { this.render_tna_tab($panels); }
 		else if (this.active_tab === "jobwork") $panels.html(this.tpl_preview_tab(
 			"Job work isn't wired to a doctype yet.",
 			"This tab is a styled placeholder. Add a Job Work / Subcontracting doctype and this page can show real cut plans, dispatch, and receipts here."
@@ -1265,6 +1262,246 @@ $panels.html(`
 		});
 	}
 
+	// ---------- Time & Action ----------
+	render_tna_tab($panels) {
+		$panels.html(`<div class="sw-loading">Loading time &amp; action…</div>`);
+		frappe.call({
+			method: "apparel_erp.product_development.doctype.style_tna.style_tna.get_workspace_tna",
+			args: { style: this.style.name }
+		}).then((r) => {
+			this.workspace_tna = r.message || null;
+			this.tna_count = this.workspace_tna ? (this.workspace_tna.activities || []).length : 0;
+			$(this.wrapper).find(`#swTabs button[data-t="tna"] .sw-count`).remove();
+			if (this.tna_count) {
+				$(this.wrapper).find(`#swTabs button[data-t="tna"]`).append(`<span class="sw-count">${this.tna_count}</span>`);
+			}
+			this.paint_tna_tab($panels);
+		});
+	}
+
+	paint_tna_tab($panels) {
+		const t = this.workspace_tna;
+		if (!t) {
+			$panels.html(`
+				<div class="sw-card">
+					<div class="sw-card-b">
+						<div class="sw-empty">No Time &amp; Action schedule yet for this style.</div>
+						<button class="sw-btn sw-btn-pri sw-btn-sm" id="swCreateTna" style="margin-top:10px">Set up T&amp;A schedule</button>
+					</div>
+				</div>
+			`);
+			$panels.find("#swCreateTna").on("click", () => this.prompt_create_tna($panels));
+			return;
+		}
+
+		const statusMap = {
+			Done: ["pill-ok", "Done"],
+			Late: ["pill-bad", "Late"],
+			"At Risk": ["pill-warn", "At risk"],
+			Open: ["pill-mut", "Open"]
+		};
+
+		const fmtDate = (d) => d ? frappe.datetime.str_to_user(d) : `<span class="sw-empty">—</span>`;
+
+		const rows = t.activities || [];
+		let lastGroup = null;
+		let rowsHtml = "";
+		rows.forEach((r) => {
+			if (r.activity_group && r.activity_group !== lastGroup) {
+				rowsHtml += `<tr class="sw-grp"><td colspan="8">${frappe.utils.escape_html(r.activity_group)}</td></tr>`;
+				lastGroup = r.activity_group;
+			}
+			const [cls, lbl] = statusMap[r.status] || statusMap.Open;
+			const vc = r.variance_days > 0 ? "var(--sw-bad)" : r.variance_days < 0 ? "var(--sw-ok)" : "var(--sw-ink-3)";
+			rowsHtml += `
+				<tr${r.status === "Late" ? ' style="background:var(--sw-bad-bg)"' : ""}>
+					<td>${r.is_milestone ? '<span style="color:var(--sw-warn)">\u25c6</span> ' : ""}${frappe.utils.escape_html(r.activity || "")}</td>
+					<td style="color:var(--sw-ink-2)">${frappe.utils.escape_html(r.responsible || "")}</td>
+					<td>${fmtDate(r.plan_date)}</td>
+					<td>${fmtDate(r.revised_date)}</td>
+					<td>${fmtDate(r.actual_date)}</td>
+					<td class="num" style="color:${vc}">${r.variance_days > 0 ? "+" : ""}${r.variance_days || 0}</td>
+					<td><span class="pill ${cls}">${lbl}</span></td>
+					<td><button class="sw-btn sw-btn-sm" data-name="${frappe.utils.escape_html(r.name)}" data-activity="${frappe.utils.escape_html(r.activity || "")}">View</button></td>
+				</tr>`;
+		});
+
+		$panels.html(`
+			<div class="sw-card">
+				<div class="sw-card-b">
+					<div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap">
+						<div>
+							<div style="font-size:15px;font-weight:600">${frappe.utils.escape_html(t.po_reference || "No PO reference")}${t.po_qty ? ` · ${Number(t.po_qty).toLocaleString()} pcs` : ""}${t.incoterm ? ` · ${frappe.utils.escape_html(t.incoterm)}` : ""}</div>
+							<div style="color:var(--sw-ink-2);font-size:13px;margin-top:2px">${frappe.utils.escape_html(t.template || "")}</div>
+						</div>
+						<div style="text-align:right">
+							<div style="font-size:12px;color:var(--sw-ink-2)">Ex-factory</div>
+							<div style="font-size:16px;font-weight:600">${fmtDate(t.ex_factory_date)}</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="sw-grid3" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+				<div class="sw-kpi"><div class="lbl">Completed</div><div class="val">${t.kpis.completed}</div></div>
+				<div class="sw-kpi"><div class="lbl">On track</div><div class="val">${t.kpis.on_track}</div></div>
+				<div class="sw-kpi sw-kpi-warn"><div class="lbl">At risk</div><div class="val">${t.kpis.at_risk}</div></div>
+				<div class="sw-kpi sw-kpi-bad"><div class="lbl">Delayed</div><div class="val">${t.kpis.delayed}</div></div>
+			</div>
+
+			${t.banner ? `<div class="sw-banner sw-banner-bad"><span>${frappe.utils.escape_html(t.banner)}</span></div>` : ""}
+
+			<div class="sw-card">
+				<div class="sw-card-h">
+					<h2>Activities</h2>
+					<div class="right">
+						<button class="sw-btn sw-btn-sm" id="swAddTnaActivity">+ Add activity</button>
+						<button class="sw-btn sw-btn-sm" id="swRescheduleTna">Reschedule</button>
+					</div>
+				</div>
+				<table>
+					<thead><tr><th style="width:28%">Activity</th><th style="width:12%">Owner</th><th style="width:11%">Plan</th><th style="width:11%">Revised</th><th style="width:11%">Actual</th><th class="num" style="width:8%">Var</th><th style="width:12%">Status</th><th style="width:6%"></th></tr></thead>
+					<tbody>${rowsHtml || `<tr><td colspan="8" class="sw-empty">No activities yet.</td></tr>`}</tbody>
+				</table>
+			</div>
+		`);
+		this.bind_tna_tab($panels);
+	}
+
+	bind_tna_tab($panels) {
+		$panels.find("#swAddTnaActivity").on("click", () => this.prompt_add_tna_activity($panels));
+		$panels.find("#swRescheduleTna").on("click", () => {
+			frappe.confirm(
+				"Reschedule downstream activities based on the worst current delay?",
+				() => {
+					frappe.dom.freeze("Recalculating…");
+					frappe.call({
+						method: "apparel_erp.product_development.doctype.style_tna.style_tna.reschedule_workspace_tna",
+						args: { style: this.style.name },
+						callback: (r) => {
+							frappe.dom.unfreeze();
+							this.workspace_tna = r.message;
+							this.paint_tna_tab($panels);
+							const msg = r.message || {};
+							sw_toast(this.wrapper, msg.shifted
+								? `Shifted ${msg.shifted} activity(s) by ${msg.delay_days} day(s).`
+								: "No active delay found — nothing to reschedule.");
+						},
+						error: () => frappe.dom.unfreeze()
+					});
+				}
+			);
+		});
+		$panels.find("[data-name]").on("click", (e) => {
+			const name = $(e.currentTarget).data("name");
+			const activity = $(e.currentTarget).data("activity");
+			const row = (this.workspace_tna.activities || []).find(r => r.name === name);
+			if (!row) return;
+			const d = new frappe.ui.Dialog({
+				title: activity,
+				fields: [
+					{ fieldname: "info", fieldtype: "HTML" }
+				],
+				primary_action_label: row.actual_date ? "Close" : "Mark done today",
+				primary_action: () => {
+					if (row.actual_date) { d.hide(); return; }
+					frappe.dom.freeze("Saving…");
+					frappe.call({
+						method: "apparel_erp.product_development.doctype.style_tna.style_tna.mark_tna_activity_actual",
+						args: { style: this.style.name, activity_name: name },
+						callback: (r) => {
+							frappe.dom.unfreeze();
+							d.hide();
+							this.workspace_tna = r.message;
+							this.paint_tna_tab($panels);
+							sw_toast(this.wrapper, `${activity} marked done.`);
+						},
+						error: () => frappe.dom.unfreeze()
+					});
+				}
+			});
+			const fmtDate = (v) => v ? frappe.datetime.str_to_user(v) : "—";
+			d.fields_dict.info.$wrapper.html(`
+				<div class="attr"><span>Planned</span><span>${fmtDate(row.plan_date)}</span></div>
+				<div class="attr"><span>Revised</span><span>${fmtDate(row.revised_date)}</span></div>
+				<div class="attr"><span>Actual</span><span>${fmtDate(row.actual_date)}</span></div>
+				<div class="attr"><span>Variance</span><span>${row.variance_days > 0 ? "+" : ""}${row.variance_days || 0} day(s)</span></div>
+				${row.source_reference ? `<div class="attr"><span>Source</span><span class="mono">${frappe.utils.escape_html(row.source_reference)}</span></div>` : ""}
+			`);
+			d.show();
+		});
+	}
+
+	prompt_create_tna($panels) {
+		const d = new frappe.ui.Dialog({
+			title: "Set up Time & Action schedule",
+			fields: [
+				{ fieldname: "po_reference", label: "Buyer PO", fieldtype: "Data" },
+				{ fieldname: "po_qty", label: "PO Quantity", fieldtype: "Int" },
+				{ fieldname: "incoterm", label: "Incoterm", fieldtype: "Data", default: "FOB" },
+				{ fieldname: "template", label: "T&A Template", fieldtype: "Data" },
+				{ fieldname: "ex_factory_date", label: "Ex-factory Date", fieldtype: "Date" }
+			],
+			primary_action_label: "Create",
+			primary_action: (values) => {
+				frappe.dom.freeze("Creating…");
+				frappe.call({
+					method: "apparel_erp.product_development.doctype.style_tna.style_tna.create_workspace_tna",
+					args: { style: this.style.name, payload: JSON.stringify(values) },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						d.hide();
+						this.workspace_tna = r.message;
+						this.paint_tna_tab($panels);
+						sw_toast(this.wrapper, "Time & Action schedule created.");
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			}
+		});
+		d.show();
+	}
+
+	prompt_add_tna_activity($panels) {
+		const d = new frappe.ui.Dialog({
+			title: "Add activity",
+			fields: [
+				{ fieldname: "activity_group", label: "Group", fieldtype: "Data", description: "e.g. Fabric, Pre-production, Production and shipping" },
+				{ fieldname: "activity", label: "Activity", fieldtype: "Data", reqd: 1 },
+				{ fieldname: "responsible", label: "Owner", fieldtype: "Data" },
+				{ fieldname: "plan_date", label: "Plan date", fieldtype: "Date", reqd: 1 },
+				{ fieldname: "is_milestone", label: "Milestone", fieldtype: "Check" }
+			],
+			primary_action_label: "Add",
+			primary_action: (values) => {
+				const activities = (this.workspace_tna.activities || []).map(r => ({ ...r }));
+				activities.push({
+					activity_group: values.activity_group,
+					activity: values.activity,
+					responsible: values.responsible,
+					plan_date: values.plan_date,
+					revised_date: values.plan_date,
+					is_milestone: values.is_milestone
+				});
+				frappe.dom.freeze("Saving…");
+				frappe.call({
+					method: "apparel_erp.product_development.doctype.style_tna.style_tna.save_workspace_tna",
+					args: { style: this.style.name, payload: JSON.stringify({ activities }) },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						d.hide();
+						this.workspace_tna = r.message;
+						this.tna_count = (this.workspace_tna.activities || []).length;
+						this.paint_tna_tab($panels);
+						sw_toast(this.wrapper, "Activity added.");
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			}
+		});
+		d.show();
+	}
+
 	render_techpack_tab($panels) {
 		$panels.html(`<div class="sw-loading">Loading tech pack…</div>`);
 		frappe.call({
@@ -1859,6 +2096,13 @@ const SW_CSS = `
 .pill-info{background:var(--sw-accent-soft);color:var(--sw-accent)}
 .pill-bad{background:var(--sw-bad-bg);color:var(--sw-bad)}
 .pill-mut{background:#F1F5F9;color:var(--sw-ink-2)}
+.sw-kpi{border:1px solid var(--sw-line);border-radius:var(--sw-r);padding:10px 14px;background:#fff}
+.sw-kpi .lbl{font-size:11px;color:var(--sw-ink-2);text-transform:uppercase;letter-spacing:.3px}
+.sw-kpi .val{font-size:20px;font-weight:600;margin-top:2px}
+.sw-kpi-warn{background:var(--sw-warn-bg);border-color:#FDE68A}
+.sw-kpi-warn .lbl,.sw-kpi-warn .val{color:var(--sw-warn)}
+.sw-kpi-bad{background:var(--sw-bad-bg);border-color:#FCA5A5}
+.sw-kpi-bad .lbl,.sw-kpi-bad .val{color:var(--sw-bad)}
 .num{text-align:right;font-variant-numeric:tabular-nums}
 .empty{color:var(--sw-ink-3);font-size:12px}
 .note{background:#F8FAFC;border:1px solid var(--sw-line);border-radius:var(--sw-r-sm);padding:9px 12px;font-size:12px;color:var(--sw-ink-2)}

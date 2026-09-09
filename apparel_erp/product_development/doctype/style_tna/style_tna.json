@@ -1,0 +1,25 @@
+{
+ "doctype": "DocType",
+ "name": "Style TNA",
+ "module": "Product Development",
+ "autoname": "format:TNA-{style}",
+ "engine": "InnoDB",
+ "track_changes": 1,
+ "fields": [
+  {"fieldname": "style", "fieldtype": "Link", "label": "Style", "options": "Style", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1, "unique": 1},
+  {"fieldname": "sb_order", "fieldtype": "Section Break", "label": "Order"},
+  {"fieldname": "po_reference", "fieldtype": "Data", "label": "Buyer PO", "in_list_view": 1},
+  {"fieldname": "po_qty", "fieldtype": "Int", "label": "PO Quantity"},
+  {"fieldname": "cb1", "fieldtype": "Column Break"},
+  {"fieldname": "incoterm", "fieldtype": "Data", "label": "Incoterm", "default": "FOB"},
+  {"fieldname": "template", "fieldtype": "Data", "label": "T&A Template", "description": "e.g. FOB woven top - just a label for which schedule template this was built from."},
+  {"fieldname": "cb2", "fieldtype": "Column Break"},
+  {"fieldname": "ex_factory_date", "fieldtype": "Date", "label": "Ex-factory Date"},
+  {"fieldname": "sb_activities", "fieldtype": "Section Break", "label": "Activities"},
+  {"fieldname": "activities", "fieldtype": "Table", "options": "Style TNA Activity", "label": "Activities"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Manufacturing Manager", "read": 1, "write": 1, "create": 1}
+ ]
+}

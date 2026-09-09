@@ -1,0 +1,21 @@
+{
+ "doctype": "DocType",
+ "name": "Style TNA Activity",
+ "module": "Product Development",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "activity_group", "fieldtype": "Data", "label": "Group", "in_list_view": 1, "description": "e.g. Order and finance, Fabric, Pre-production, Production and shipping. Rows are grouped by this in the workspace."},
+  {"fieldname": "activity", "fieldtype": "Data", "label": "Activity", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "responsible", "fieldtype": "Data", "label": "Owner", "in_list_view": 1, "description": "Team or role responsible, e.g. Merch, Fabric, QA, PPC, Logistics"},
+  {"fieldname": "plan_date", "fieldtype": "Date", "label": "Plan", "in_list_view": 1},
+  {"fieldname": "revised_date", "fieldtype": "Date", "label": "Revised", "in_list_view": 1, "description": "Defaults to Plan when not explicitly delayed."},
+  {"fieldname": "actual_date", "fieldtype": "Date", "label": "Actual", "in_list_view": 1},
+  {"fieldname": "is_milestone", "fieldtype": "Check", "label": "Milestone"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Open\nAt Risk\nLate\nDone", "default": "Open", "read_only": 1, "in_list_view": 1, "description": "Derived automatically: Done once Actual is set; Late if past Revised with no Actual; At Risk if Revised has slipped past Plan but isn't due yet; otherwise Open."},
+  {"fieldname": "variance_days", "fieldtype": "Int", "label": "Variance (days)", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "label": "Source Reference", "description": "Optional link back to the record driving this activity, e.g. a Purchase Receipt or Quality Inspection name."}
+ ],
+ "permissions": []
+}
