@@ -15,14 +15,27 @@ from apparel_erp.product_development.doctype.style_bom.style_bom import (
 class StyleCostSheet(Document):
 	def validate(self):
 		self.apply_computed_totals()
+		if self.docstatus == 0 and self.workflow_state != "Draft":
+			self.workflow_state = "Draft"
 
 	def on_submit(self):
+		# Versioning: each submit is a new revision, chained via amended_from,
+		# exactly like Style BOM's version field - every submitted costing
+		# stays a permanent, read-only snapshot and edits only ever happen
+		# on a fresh Draft (amend).
 		if self.amended_from:
 			prev = frappe.db.get_value("Style Cost Sheet", self.amended_from, "revision") or 1
 			self.db_set("revision", prev + 1)
 		elif not self.revision:
 			self.db_set("revision", 1)
+		# Submitting only ever lands the document in "Submitted" - a further,
+		# explicit Approve step (see approve_workspace_cost_sheet_final) is
+		# required before it is considered Approved.
+		self.db_set("workflow_state", "Submitted")
 		self._mark_style_costed()
+
+	def on_cancel(self):
+		self.db_set("workflow_state", "Draft")
 
 	def apply_computed_totals(self):
 		amounts = compute_cost_amounts(self)
@@ -86,6 +99,7 @@ def serialize_cost_sheet(doc, bom_meta=None, tech_pack=None, bom_costs=None):
 		"style_bom": doc.style_bom,
 		"revision": doc.revision or 0,
 		"docstatus": doc.docstatus,
+		"workflow_state": doc.workflow_state or ("Submitted" if doc.docstatus == 1 else "Draft"),
 		"currency": doc.currency or "INR",
 		"target_margin": doc.target_margin,
 		"buyer_target": doc.buyer_target,
@@ -239,18 +253,77 @@ def save_workspace_cost_sheet(style, payload=None):
 
 @frappe.whitelist()
 def approve_workspace_cost_sheet(style):
+	"""Clicking "Submit costing" in the workspace lands the sheet in the
+	Submitted state (docstatus 1, workflow_state "Submitted") - it does NOT
+	jump straight to Approved. A separate reviewer action
+	(approve_workspace_cost_sheet_final) is required to mark it Approved."""
 	if not frappe.has_permission("Style Cost Sheet", "submit"):
-		frappe.throw(_("Not permitted to approve Style Cost Sheet"))
+		frappe.throw(_("Not permitted to submit Style Cost Sheet"))
 
 	doc = _get_or_create_draft_cost_sheet(style)
 	if not doc.name:
 		doc.save(ignore_permissions=True)
 	if doc.docstatus == 1:
 		return serialize_cost_sheet(doc, _bom_meta(style, doc.style_bom), _tech_pack_meta(style))
-	if not doc.revision:
-		doc.revision = 1
-		doc.db_set("revision", 1)
 	doc.submit()
 	frappe.db.commit()
 	doc.reload()
 	return serialize_cost_sheet(doc, _bom_meta(style, doc.style_bom), _tech_pack_meta(style))
+
+
+@frappe.whitelist()
+def approve_workspace_cost_sheet_final(style):
+	"""Explicit reviewer step that moves an already-Submitted costing to
+	Approved. Kept separate from submit() on purpose so "Submitted" and
+	"Approved" stay two distinct, auditable states instead of one click
+	skipping straight past review."""
+	if not frappe.has_permission("Style Cost Sheet", "submit"):
+		frappe.throw(_("Not permitted to approve Style Cost Sheet"))
+
+	name = frappe.db.get_value(
+		"Style Cost Sheet", {"style": style, "docstatus": 1}, "name", order_by="revision desc"
+	)
+	if not name:
+		frappe.throw(_("Submit the costing before it can be approved."))
+	doc = frappe.get_doc("Style Cost Sheet", name)
+	if doc.workflow_state == "Approved":
+		return serialize_cost_sheet(doc, _bom_meta(style, doc.style_bom), _tech_pack_meta(style))
+	doc.db_set("workflow_state", "Approved")
+	frappe.db.commit()
+	doc.reload()
+	return serialize_cost_sheet(doc, _bom_meta(style, doc.style_bom), _tech_pack_meta(style))
+
+
+@frappe.whitelist()
+def amend_workspace_cost_sheet(style):
+	"""Explicit "Start new revision" action in the workspace - creates the
+	next Draft revision from the latest Submitted/Approved Style Cost Sheet
+	via a standard Frappe amend, chained through amended_from exactly like
+	Style BOM's version history. Idempotent: reuses an amendment already in
+	progress instead of creating duplicates."""
+	if not frappe.has_permission("Style Cost Sheet", "create"):
+		frappe.throw(_("Not permitted to create Style Cost Sheet"))
+
+	latest = frappe.db.get_value(
+		"Style Cost Sheet", {"style": style, "docstatus": 1}, "name", order_by="revision desc"
+	)
+	if not latest:
+		frappe.throw(_("No submitted costing to amend yet."))
+
+	existing_draft = frappe.db.get_value(
+		"Style Cost Sheet", {"style": style, "docstatus": 0, "amended_from": latest}, "name"
+	)
+	if existing_draft:
+		doc = frappe.get_doc("Style Cost Sheet", existing_draft)
+	else:
+		source = frappe.get_doc("Style Cost Sheet", latest)
+		doc = frappe.copy_doc(source)
+		doc.amended_from = latest
+		doc.workflow_state = "Draft"
+		doc.revision = 0
+		doc.insert(ignore_permissions=True)
+		frappe.db.commit()
+
+	bom_meta = _bom_meta(style, doc.style_bom)
+	bom_costs = cost_bom_lines(frappe.get_doc("Style BOM", doc.style_bom)) if doc.style_bom else {}
+	return serialize_cost_sheet(doc, bom_meta, _tech_pack_meta(style), bom_costs)

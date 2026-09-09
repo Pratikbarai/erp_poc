@@ -12,6 +12,7 @@
   {"fieldname": "cb1", "fieldtype": "Column Break"},
   {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "read_only": 1, "in_list_view": 1},
   {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Style Cost Sheet", "read_only": 1, "no_copy": 1, "print_hide": 1},
+  {"fieldname": "workflow_state", "fieldtype": "Select", "label": "Status", "options": "Draft\nSubmitted\nApproved", "default": "Draft", "read_only": 1, "in_list_view": 1, "no_copy": 1, "description": "Draft while editable. Submitting sets Submitted. A separate Approve step (see approve_workspace_cost_sheet_final) moves it to Approved."},
   {"fieldname": "sb_commercial", "fieldtype": "Section Break", "label": "Commercial"},
   {"fieldname": "currency", "fieldtype": "Select", "label": "Currency", "options": "INR\nUSD", "default": "INR"},
   {"fieldname": "target_margin", "fieldtype": "Percent", "label": "Target Margin %", "default": "18"},

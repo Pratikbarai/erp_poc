@@ -251,7 +251,7 @@ class StyleWorkspace {
 	render_panel() {
 		const s = this.style;
 		const $panels = $(this.wrapper).find("#swPanels");
-		if (this.active_tab === "info") $panels.html(this.tpl_info(s));
+		if (this.active_tab === "info") { $panels.html(this.tpl_info(s)); this.bind_info($panels); }
 		else if (this.active_tab === "colours") { $panels.html(this.tpl_colours(s)); this.bind_colours(); }
 		else if (this.active_tab === "bom") { this.render_bom_tab($panels); }
 		else if (this.active_tab === "techpack") this.render_techpack_tab($panels);
@@ -314,6 +314,20 @@ class StyleWorkspace {
 							${sw_attr_link("Costing", "Open \u2192", () => this.switch_tab("costing"))}
 						</div>
 					</div>
+					<div class="sw-card">
+						<div class="sw-card-h"><h2>BOM generation</h2></div>
+						<div class="sw-card-b">
+							<div class="sw-f">
+								<label>Generate BOM at</label>
+								<select id="swBomStage">
+									<option value="Design & Tech Pack" ${(s.bom_generation_stage || "Sampling") === "Design & Tech Pack" ? "selected" : ""}>Design & Tech Pack</option>
+									<option value="Costing" ${(s.bom_generation_stage || "Sampling") === "Costing" ? "selected" : ""}>Costing</option>
+									<option value="Sampling" ${(s.bom_generation_stage || "Sampling") === "Sampling" ? "selected" : ""}>Sampling</option>
+								</select>
+							</div>
+							<div class="sw-note">The "Generate BOM" action only appears on the tab matching this choice, so the person driving that stage is the one who kicks off the Style BOM.</div>
+						</div>
+					</div>
 				</div>
 			</div>
 			<div class="sw-card">
@@ -321,6 +335,12 @@ class StyleWorkspace {
 				<div class="sw-card-b"><div class="sw-flow" id="swFlow">${this.tpl_flow(s)}</div></div>
 			</div>
 		`;
+	}
+
+	bind_info($panels) {
+		$panels.find("#swBomStage").on("change", (e) => {
+			this.save_bom_generation_stage($(e.currentTarget).val());
+		});
 	}
 
 	tpl_flow(s) {
@@ -336,6 +356,67 @@ class StyleWorkspace {
 					<small>${state === "done" ? "Done" : state === "now" ? "In progress" : "Pending"}</small>
 				</div>`;
 		}).join("");
+	}
+
+	// ---------- Generate BOM (Design & Tech / Costing / Sampling) ----------
+	bom_stage_label() {
+		return this.style.bom_generation_stage || "Sampling";
+	}
+
+	save_bom_generation_stage(stage, onDone) {
+		frappe.dom.freeze("Saving…");
+		frappe.call({
+			method: "frappe.client.set_value",
+			args: { doctype: "Style", name: this.style.name, fieldname: "bom_generation_stage", value: stage },
+			callback: () => {
+				frappe.dom.unfreeze();
+				this.style.bom_generation_stage = stage;
+				sw_toast(this.wrapper, `BOM will now be generated at the ${stage} stage.`);
+				if (onDone) onDone();
+			},
+			error: () => frappe.dom.unfreeze()
+		});
+	}
+
+	generate_bom_button_html(stage) {
+		const configured = this.bom_stage_label();
+		if (configured !== stage) return "";
+		return `<button class="sw-btn sw-btn-pri sw-btn-sm" id="swGenBom" data-stage="${stage}">Generate BOM</button>`;
+	}
+
+	generate_bom_hint_html(stage) {
+		// Shown on the tabs that are NOT the chosen generation stage, so
+		// whoever is on Tech Pack/Costing/Sampling always understands why
+		// the "Generate BOM" button isn't sitting in front of them here -
+		// the style owner decided it should happen after a different
+		// stage, and this links straight to where that choice is made.
+		const configured = this.bom_stage_label();
+		if (configured === stage) return "";
+		return `<span class="sw-pill sw-pill-mut sw-gen-bom-hint" title="Change this on the Style information tab" style="cursor:pointer">BOM generates after ${configured}</span>`;
+	}
+
+	bind_generate_bom_button($panels) {
+		$panels.find(".sw-gen-bom-hint").on("click", () => this.switch_tab("info"));
+		$panels.find("#swGenBom").on("click", (e) => {
+			const stage = $(e.currentTarget).data("stage");
+			frappe.confirm(
+				`Generate the Style BOM for ${this.style.style_no} now, at the ${stage} stage?`,
+				() => {
+					frappe.dom.freeze("Generating BOM…");
+					frappe.call({
+						method: "apparel_erp.product_development.doctype.style_bom.style_bom.generate_style_bom_for_stage",
+						args: { style: this.style.name, stage },
+						callback: (r) => {
+							frappe.dom.unfreeze();
+							const msg = r.message || {};
+							sw_toast(this.wrapper, msg.created ? "Style BOM created." : "Style BOM already exists — opening it.");
+							this.switch_tab("bom");
+						},
+						error: () => frappe.dom.unfreeze()
+					});
+				}
+			);
+		});
 	}
 
 	switch_tab(t) {
@@ -394,6 +475,8 @@ class StyleWorkspace {
 					<div class="sw-card-h">
 						<h2>Colour × size matrix</h2>
 						<div class="sw-right">
+							${this.generate_bom_button_html("Sampling")}
+							${this.generate_bom_hint_html("Sampling")}
 							<button class="sw-btn sw-btn-pri sw-btn-sm" id="swGenAll">Generate all SKUs</button>
 						</div>
 					</div>
@@ -408,6 +491,7 @@ class StyleWorkspace {
 
 	bind_colours() {
 		const $panels = $(this.wrapper).find("#swPanels");
+		this.bind_generate_bom_button($panels);
 		$panels.find(".sw-sku[data-item]").on("click", (e) => {
 			e.preventDefault();
 			frappe.set_route("Form", "Item", $(e.currentTarget).data("item"));
@@ -900,9 +984,10 @@ collect_bom_payload($panels) {
 			: "—";
 		const tpLabel = c.tech_pack ? `v${c.tech_pack.version}` : "—";
 		const revLabel = c.revision ? String(c.revision).padStart(2, "0") : "draft";
-		const status = c.docstatus === 1
-			? `<span class="pill pill-ok" id="swCostStatus">Approved</span>`
-			: `<span class="pill pill-warn" id="swCostStatus">Awaiting approval</span>`;
+		const workflowState = c.workflow_state || (c.docstatus === 1 ? "Submitted" : "Draft");
+		const statusPillClass = workflowState === "Approved" ? "pill-ok" : (workflowState === "Submitted" ? "pill-info" : "pill-warn");
+		const statusLabel = workflowState === "Approved" ? "Approved" : (workflowState === "Submitted" ? "Submitted — awaiting approval" : "Draft");
+		const status = `<span class="pill ${statusPillClass}" id="swCostStatus">${statusLabel}</span>`;
 		const fabricBasis = c.fabric_qty
 			? `${Number(c.fabric_qty).toFixed(2)} × ${fmt(c.fabric_rate)}`
 			: "Style BOM fabric lines";
@@ -916,7 +1001,7 @@ $panels.html(`
 					<div class="card-h">
 						<h2>Style cost sheet — revision ${revLabel}</h2>
 						<div class="right">
-							${c.docstatus === 1 ? `<span class="pill pill-ok">Approved</span>` : `<span class="pill pill-warn">Draft</span>`}
+							${status}
 							${editable ? `<button class="sw-btn sw-btn-sm" id="swRecalcCost">Recalculate</button>` : ""}
 						</div>
 					</div>
@@ -969,15 +1054,27 @@ $panels.html(`
 						</div>
 					</div>
 					<div class="card">
-						<div class="card-h"><h2>Approval</h2></div>
+						<div class="card-h">
+						<h2>Approval</h2>
+						<div class="right">${this.generate_bom_button_html("Costing")}${this.generate_bom_hint_html("Costing")}</div>
+					</div>
 						<div class="card-b">
 							<div class="attr"><span>Uses Tech Pack</span><span>${frappe.utils.escape_html(tpLabel)}</span></div>
 							<div class="attr"><span>Uses Style BOM</span><span>${frappe.utils.escape_html(bomLabel)}</span></div>
 							<div class="attr"><span>Status</span>${status}</div>
 							${editable ? `
 								<button class="sw-btn" id="swSaveCost" style="margin-top:12px">Save costing</button>
-								<button class="sw-btn sw-btn-pri" id="swApproveCost" style="margin-top:8px">Approve costing</button>
-							` : `<div class="note" style="margin-top:12px">Approved against the Style BOM and tech pack shown above.</div>`}
+								<button class="sw-btn sw-btn-pri" id="swApproveCost" style="margin-top:8px">Submit costing</button>
+							` : ""}
+							${!editable && workflowState === "Submitted" ? `
+								<div class="note" style="margin-top:12px">Submitted against the Style BOM and tech pack shown above — awaiting final approval.</div>
+								<button class="sw-btn sw-btn-pri" id="swFinalApproveCost" style="margin-top:8px">Approve costing</button>
+								<button class="sw-btn sw-btn-sm" id="swAmendCost" style="margin-top:8px">Start new revision</button>
+							` : ""}
+							${!editable && workflowState === "Approved" ? `
+								<div class="note" style="margin-top:12px">Approved against the Style BOM and tech pack shown above.</div>
+								<button class="sw-btn sw-btn-sm" id="swAmendCost" style="margin-top:8px">Start new revision</button>
+							` : ""}
 							${c.name ? `<button class="sw-btn sw-btn-sm" id="swOpenCostForm" style="margin-top:8px">Open cost sheet</button>` : ""}
 						</div>
 					</div>
@@ -1010,6 +1107,7 @@ $panels.html(`
 	}
 
 	bind_costing_tab($panels) {
+		this.bind_generate_bom_button($panels);
 		// Extra commercial line items: "+ Add item" appends a blank editable
 		// row client-side only (no server round trip needed just to add a
 		// row); Save/Recalculate below picks up whatever rows are currently
@@ -1057,8 +1155,8 @@ $panels.html(`
 			});
 		});
 		$panels.find("#swApproveCost").on("click", () => {
-			frappe.confirm("Approve this costing against the current tech pack and Style BOM?", () => {
-				frappe.dom.freeze("Approving costing…");
+			frappe.confirm("Submit this costing against the current tech pack and Style BOM? It will move to Submitted, awaiting a separate approval.", () => {
+				frappe.dom.freeze("Submitting costing…");
 				frappe.call({
 					method: "apparel_erp.product_development.doctype.style_cost_sheet.style_cost_sheet.save_workspace_cost_sheet",
 					args: { style: this.style.name, payload: JSON.stringify(this.collect_cost_payload($panels)) },
@@ -1070,7 +1168,7 @@ $panels.html(`
 								frappe.dom.unfreeze();
 								this.workspace_cost = r.message;
 								this.paint_costing_tab($(this.wrapper).find("#swPanels"));
-								sw_toast(this.wrapper, "Costing approved.");
+								sw_toast(this.wrapper, "Costing submitted — awaiting approval.");
 							},
 							error: () => frappe.dom.unfreeze()
 						});
@@ -1078,6 +1176,41 @@ $panels.html(`
 					error: () => frappe.dom.unfreeze()
 				});
 			});
+		});
+		$panels.find("#swFinalApproveCost").on("click", () => {
+			frappe.confirm("Approve this submitted costing?", () => {
+				frappe.dom.freeze("Approving costing…");
+				frappe.call({
+					method: "apparel_erp.product_development.doctype.style_cost_sheet.style_cost_sheet.approve_workspace_cost_sheet_final",
+					args: { style: this.style.name },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						this.workspace_cost = r.message;
+						this.paint_costing_tab($(this.wrapper).find("#swPanels"));
+						sw_toast(this.wrapper, "Costing approved.");
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			});
+		});
+		$panels.find("#swAmendCost").on("click", () => {
+			frappe.confirm(
+				"Start a new draft revision of this costing? The current revision stays as a permanent, read-only record.",
+				() => {
+					frappe.dom.freeze("Creating new revision…");
+					frappe.call({
+						method: "apparel_erp.product_development.doctype.style_cost_sheet.style_cost_sheet.amend_workspace_cost_sheet",
+						args: { style: this.style.name },
+						callback: (r) => {
+							frappe.dom.unfreeze();
+							this.workspace_cost = r.message;
+							this.paint_costing_tab($(this.wrapper).find("#swPanels"));
+							sw_toast(this.wrapper, "New draft revision created — edit and submit when ready.");
+						},
+						error: () => frappe.dom.unfreeze()
+					});
+				}
+			);
 		});
 	}
 
@@ -1209,6 +1342,8 @@ $panels.html(`
 				<div class="sw-card-h">
 					<h2>Tech pack</h2>
 					<div class="sw-right">
+						${this.generate_bom_button_html("Design & Tech Pack")}
+						${this.generate_bom_hint_html("Design & Tech Pack")}
 						<button class="sw-pill sw-pill-mut sw-version-button" id="swTechPackVersion" title="View Tech Pack version history">${frappe.utils.escape_html(tp.tech_pack_version || "v1")}</button>
 						<button class="sw-btn sw-btn-sm" id="swDownloadPdf">Download PDF</button>
 						<button class="sw-btn sw-btn-sm" id="swOpenTPForm">Open full tech pack</button>
@@ -1280,6 +1415,7 @@ $panels.html(`
 			</div>
 		`);
 		this.tp = tp;
+		this.bind_generate_bom_button($panels);
 		$panels.find(".sw-save-bom-rates").on("click", () => this.save_bom_rates_from_techpack($panels));
 		$panels.find("#swOpenTPForm").on("click", () => frappe.set_route("Form", "Design Tech Pack", tp.name));
 		$panels.find("#swOpenTPMeasurements").on("click", () => frappe.set_route("Form", "Design Tech Pack", tp.name));
@@ -1720,6 +1856,7 @@ const SW_CSS = `
 .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500}
 .pill-ok{background:var(--sw-ok-bg);color:var(--sw-ok)}
 .pill-warn{background:var(--sw-warn-bg);color:var(--sw-warn)}
+.pill-info{background:var(--sw-accent-soft);color:var(--sw-accent)}
 .pill-bad{background:var(--sw-bad-bg);color:var(--sw-bad)}
 .pill-mut{background:#F1F5F9;color:var(--sw-ink-2)}
 .num{text-align:right;font-variant-numeric:tabular-nums}

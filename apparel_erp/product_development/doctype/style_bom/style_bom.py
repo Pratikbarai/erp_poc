@@ -26,6 +26,84 @@ class StyleBOM(Document):
 				row.line_id = frappe.generate_hash(length=8)
 
 
+@frappe.whitelist()
+def generate_style_bom_for_stage(style, stage):
+	"""Backs the "Generate BOM" action surfaced on the Design & Tech Pack,
+	Costing and Sampling tabs of the Style Workspace. Each style declares
+	(via Style.bom_generation_stage) which single stage is responsible for
+	kicking off its Style BOM - this enforces that choice server-side rather
+	than trusting the tab the click came from, and is idempotent: calling it
+	again just returns the existing Draft/submitted Style BOM instead of
+	creating duplicates."""
+	if stage not in ("Design & Tech Pack", "Costing", "Sampling"):
+		frappe.throw(_("Unknown BOM generation stage {0}").format(stage))
+
+	style_doc = frappe.get_doc("Style", style)
+	if not frappe.has_permission("Style BOM", "create"):
+		frappe.throw(_("Not permitted to create Style BOM"))
+
+	configured_stage = style_doc.get("bom_generation_stage") or "Sampling"
+	if configured_stage != stage:
+		frappe.throw(_(
+			"{0} is configured to generate its BOM at the <b>{1}</b> stage, not {2}. "
+			"Change \"Generate BOM At\" on the Style if you want to trigger it from here instead."
+		).format(style, configured_stage, stage))
+
+	_assert_stage_complete(style_doc, stage)
+
+	existing, inherited_from = find_workspace_style_bom(style)
+	if existing:
+		return {
+			"style_bom": existing.name,
+			"docstatus": existing.docstatus,
+			"created": False,
+			"inherited_from": inherited_from,
+		}
+
+	sb = frappe.new_doc("Style BOM")
+	sb.style = style
+	sb.bom_type = "Development"
+	sb.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"style_bom": sb.name, "docstatus": sb.docstatus, "created": True, "inherited_from": None}
+
+
+def _assert_stage_complete(style_doc, stage):
+	"""Generate BOM is only wired up on the tab matching Style.bom_generation_stage,
+	but reaching that tab isn't enough on its own - the actual work for that
+	stage has to be done first, or the BOM would be built from an unfinished
+	tech pack, an un-costed style, or SKUs that don't exist yet."""
+	if stage == "Design & Tech Pack":
+		status = frappe.db.get_value("Design Tech Pack", {"style": style_doc.name}, "status")
+		if status != "Completed":
+			frappe.throw(_(
+				"The Design Tech Pack for {0} is not marked <b>Completed</b> yet (currently {1}). "
+				"Finish it on the Tech Pack tab before generating the Style BOM."
+			).format(style_doc.name, status or "Not Started"))
+
+	elif stage == "Costing":
+		submitted = frappe.db.exists("Style Cost Sheet", {"style": style_doc.name, "docstatus": 1})
+		if not submitted:
+			frappe.throw(_(
+				"There is no submitted Style Cost Sheet for {0} yet. "
+				"Submit the costing on the Costing tab before generating the Style BOM."
+			).format(style_doc.name))
+
+	elif stage == "Sampling":
+		matrix_items = [m for m in (style_doc.get("matrix_items") or []) if (m.status or "Active") == "Active"]
+		if not matrix_items:
+			frappe.throw(_(
+				"{0} has no active colour × size combinations yet. "
+				"Add colours and sizes on the Colours & Sizes tab before generating the Style BOM."
+			).format(style_doc.name))
+		pending = [m for m in matrix_items if not m.item]
+		if pending:
+			frappe.throw(_(
+				"{0} of {1} SKUs on the Colours & Sizes tab are not generated yet. "
+				"Generate all SKUs before generating the Style BOM."
+			).format(len(pending), len(matrix_items)))
+
+
 def guard_generated_bom_readonly(bom_doc, method=None):
 	"""Section 7.1: generated BOMs are read-only forever, no exceptions -
 	including a manual Duplicate of one. Only the generator (which sets
