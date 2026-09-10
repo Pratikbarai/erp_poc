@@ -309,6 +309,7 @@ class StyleWorkspace {
 							${sw_attr_link("Variants", `${(s.matrix_items || []).filter(m => m.item).length} generated of ${(s.matrix_items || []).length}`, () => this.switch_tab("colours"))}
 							${sw_attr_link("Style BOM", "Manage \u2192", () => this.switch_tab("bom"))}
 							${sw_attr_link("Costing", "Open \u2192", () => this.switch_tab("costing"))}
+							<div id="swApparelOrderRow"></div>
 						</div>
 					</div>
 					<div class="sw-card">
@@ -316,13 +317,15 @@ class StyleWorkspace {
 						<div class="sw-card-b">
 							<div class="sw-f">
 								<label>Generate BOM at</label>
-								<select id="swBomStage">
+								<select id="swBomStage" ${s.bom_generation_stage ? "disabled" : ""}>
 									<option value="Design & Tech Pack" ${(s.bom_generation_stage || "Sampling") === "Design & Tech Pack" ? "selected" : ""}>Design & Tech Pack</option>
 									<option value="Costing" ${(s.bom_generation_stage || "Sampling") === "Costing" ? "selected" : ""}>Costing</option>
 									<option value="Sampling" ${(s.bom_generation_stage || "Sampling") === "Sampling" ? "selected" : ""}>Sampling</option>
 								</select>
 							</div>
-							<div class="sw-note">The "Generate BOM" action only appears on the tab matching this choice, so the person driving that stage is the one who kicks off the Style BOM.</div>
+							<div class="sw-note">${s.bom_generation_stage
+								? `Locked to <b>${frappe.utils.escape_html(s.bom_generation_stage)}</b> - this is a one-time choice and can't be changed once set.`
+								: `The "Generate BOM" action only appears on the tab matching this choice, so the person driving that stage is the one who kicks off the Style BOM. Choose carefully - it locks once saved.`}</div>
 						</div>
 					</div>
 				</div>
@@ -337,6 +340,18 @@ class StyleWorkspace {
 	bind_info($panels) {
 		$panels.find("#swBomStage").on("change", (e) => {
 			this.save_bom_generation_stage($(e.currentTarget).val());
+		});
+		// "Apparel order" row only appears once a T&A schedule with a PO
+		// actually exists - matches the prototype, and avoids implying an
+		// order is on file when nobody has set one up yet.
+		frappe.call({
+			method: "apparel_erp.product_development.doctype.style_tna.style_tna.get_workspace_tna",
+			args: { style: this.style.name }
+		}).then((r) => {
+			const t = r.message;
+			if (!t || !t.po_reference) return;
+			const label = t.po_qty ? `${frappe.utils.escape_html(t.po_reference)} \u00b7 ${Number(t.po_qty).toLocaleString()} pcs` : frappe.utils.escape_html(t.po_reference);
+			$panels.find("#swApparelOrderRow").replaceWith(sw_attr_link("Apparel order", label, () => this.switch_tab("tna")));
 		});
 	}
 
@@ -395,24 +410,40 @@ class StyleWorkspace {
 	bind_generate_bom_button($panels) {
 		$panels.find(".sw-gen-bom-hint").on("click", () => this.switch_tab("info"));
 		$panels.find("#swGenBom").on("click", (e) => {
-			const stage = $(e.currentTarget).data("stage");
-			frappe.confirm(
-				`Generate the Style BOM for ${this.style.style_no} now, at the ${stage} stage?`,
-				() => {
-					frappe.dom.freeze("Generating BOM…");
-					frappe.call({
-						method: "apparel_erp.product_development.doctype.style_bom.style_bom.generate_style_bom_for_stage",
-						args: { style: this.style.name, stage },
-						callback: (r) => {
-							frappe.dom.unfreeze();
-							const msg = r.message || {};
-							sw_toast(this.wrapper, msg.created ? "Style BOM created." : "Style BOM already exists — opening it.");
-							this.switch_tab("bom");
-						},
-						error: () => frappe.dom.unfreeze()
-					});
-				}
-			);
+			try {
+				const stage = $(e.currentTarget).data("stage");
+				frappe.confirm(
+					`Generate the Style BOM for ${this.style && this.style.style_no ? this.style.style_no : this.style.name} now, at the ${stage} stage?`,
+					() => {
+						frappe.dom.freeze("Generating BOM…");
+						frappe.call({
+							method: "apparel_erp.product_development.doctype.style_bom.style_bom.generate_style_bom_for_stage",
+							args: { style: this.style.name, stage },
+							callback: (r) => {
+								frappe.dom.unfreeze();
+								const msg = r.message || {};
+								sw_toast(this.wrapper, msg.created ? "Style BOM created." : "Style BOM already exists — opening it.");
+								this.switch_tab("bom");
+							},
+							error: (r) => {
+								frappe.dom.unfreeze();
+								console.error("generate_style_bom_for_stage failed", r);
+							}
+						});
+					}
+				);
+			} catch (err) {
+				// A silently swallowed exception here (e.g. this.style not
+				// loaded yet) is exactly what makes "Generate BOM" look like
+				// it does nothing when clicked - surface it instead of
+				// failing silently.
+				console.error("Generate BOM click handler threw", err);
+				frappe.msgprint({
+					title: "Generate BOM",
+					indicator: "red",
+					message: `Something went wrong before the confirmation dialog could open: ${err.message || err}`
+				});
+			}
 		});
 	}
 

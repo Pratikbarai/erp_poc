@@ -42,10 +42,28 @@ class Style(Document):
 			frappe.throw(_("Status must be one of: {0}").format(", ".join(STYLE_STATUSES)))
 		if (self.style_stage_status or "Draft") not in STYLE_STAGE_STATUSES:
 			frappe.throw(_("Style Stage must be one of: {0}").format(", ".join(STYLE_STAGE_STATUSES)))
+		self._lock_bom_generation_stage_once_set()
 		self.validate_base_style()
 		self.sync_matrix_rows()
 		if not self.development_stage:
 			self.development_stage = "Style Created"
+
+	def _lock_bom_generation_stage_once_set(self):
+		"""Which stage generates the BOM is a one-time decision: letting it
+		change later would let someone quietly redirect BOM generation after
+		earlier stages already relied on the original choice (e.g. a
+		Costing-gated BOM getting flipped to Sampling after costing was
+		already submitted on that assumption). Not locked until a value is
+		actually chosen, so a fresh Style can still be set up normally."""
+		if self.is_new() or not self.bom_generation_stage:
+			return
+		previous = self.get_doc_before_save()
+		if not previous or not previous.bom_generation_stage:
+			return
+		if previous.bom_generation_stage != self.bom_generation_stage:
+			frappe.throw(_(
+				"\"Generate BOM At\" is locked to <b>{0}</b> once set and can't be changed to {1}."
+			).format(previous.bom_generation_stage, self.bom_generation_stage))
 
 	def validate_base_style(self):
 		if not self.base_style:
