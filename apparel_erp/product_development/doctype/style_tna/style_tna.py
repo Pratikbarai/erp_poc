@@ -151,6 +151,79 @@ def save_workspace_tna(style, payload):
 	return _serialize(doc)
 
 
+# "Fetch activities" (spec: auto-populate/tick off milestones like Design &
+# Tech Pack / Costing / Sampling from the style's own real progress
+# elsewhere in the workspace, instead of the merchandiser re-typing what
+# already happened). Each key is a stable machine reference stored in
+# Style TNA Activity.source_reference so a re-sync finds the same row again
+# even if the merchandiser has since edited its label/owner/dates.
+AUTO_TNA_MILESTONES = [
+	{"key": "auto:design_tech_pack", "activity": "Design & Tech Pack completed", "activity_group": "Product Development"},
+	{"key": "auto:costing", "activity": "Costing submitted", "activity_group": "Product Development"},
+	{"key": "auto:sampling", "activity": "Sampling SKUs generated", "activity_group": "Product Development"},
+]
+
+
+def _auto_milestone_done(style, key):
+	"""Whether this milestone's underlying condition is true RIGHT NOW.
+	Only ever used to mark a milestone done, never to un-mark one that
+	already is - see sync_tna_activities_from_style."""
+	if key == "auto:design_tech_pack":
+		return frappe.db.get_value("Design Tech Pack", {"style": style}, "status") == "Completed"
+	if key == "auto:costing":
+		return bool(frappe.db.exists("Style Cost Sheet", {"style": style, "docstatus": 1}))
+	if key == "auto:sampling":
+		style_doc = frappe.get_doc("Style", style)
+		matrix_items = [m for m in (style_doc.get("matrix_items") or []) if (m.status or "Active") == "Active"]
+		return bool(matrix_items) and all(m.item for m in matrix_items)
+	return False
+
+
+@frappe.whitelist()
+def sync_tna_activities_from_style(style):
+	"""Creates any AUTO_TNA_MILESTONES row that doesn't exist yet on this
+	Style TNA (as an open milestone with no plan/actual date - planning
+	dates stay the merchandiser's to set), and stamps actual_date = today()
+	on any whose underlying condition is met for the first time.
+
+	Deliberately never un-marks a milestone that was already completed
+	(e.g. if a costing later gets cancelled) - once-done T&A history isn't
+	erased by a later regression - and never touches manually-added
+	activities, since those don't carry one of the AUTO_TNA_MILESTONES
+	source_reference keys."""
+	name = frappe.db.get_value("Style TNA", {"style": style}, "name")
+	if not name:
+		frappe.throw(_("No Time & Action schedule for {0} yet. Set one up first.").format(style))
+	if not frappe.has_permission("Style TNA", "write"):
+		frappe.throw(_("Not permitted to edit Style TNA"))
+
+	doc = frappe.get_doc("Style TNA", name)
+	auto_keys = {m["key"] for m in AUTO_TNA_MILESTONES}
+	existing_by_key = {row.source_reference: row for row in doc.activities if row.source_reference in auto_keys}
+
+	newly_marked = []
+	for milestone in AUTO_TNA_MILESTONES:
+		row = existing_by_key.get(milestone["key"])
+		if not row:
+			row = doc.append("activities", {
+				"activity_group": milestone["activity_group"],
+				"activity": milestone["activity"],
+				"is_milestone": 1,
+				"source_reference": milestone["key"],
+			})
+		if row.actual_date:
+			continue
+		if _auto_milestone_done(style, milestone["key"]):
+			row.actual_date = today()
+			newly_marked.append(milestone["activity"])
+
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	result = _serialize(doc)
+	result["newly_marked"] = newly_marked
+	return result
+
+
 @frappe.whitelist()
 def mark_tna_activity_actual(style, activity_name, actual_date=None):
 	"""Records that an activity actually happened - used by the "Mark done

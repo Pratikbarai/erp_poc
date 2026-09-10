@@ -1122,7 +1122,10 @@ $panels.html(`
 							</div>
 							<div class="f" style="margin-top:4px">
 								<label>Extra items</label>
-								<div id="swExtraItems">${extraItemRows(c.extra_items, editable)}</div>
+								<table class="sw-extra-table">
+									<thead><tr><th>#</th><th>Item</th><th>Type</th><th class="num">Rate</th><th class="num">Ref row</th><th class="num">Amount / pc</th><th></th></tr></thead>
+									<tbody id="swExtraItems">${extraItemRows(c.extra_items, editable)}</tbody>
+								</table>
 								${editable ? `<button type="button" class="sw-btn sw-btn-sm" id="swAddExtraItem" style="margin-top:6px">+ Add item</button>` : ""}
 							</div>
 							<div class="attr"><span>Suggested selling price</span><strong id="swSellPrice">${fmt(selling)}</strong></div>
@@ -1168,6 +1171,9 @@ $panels.html(`
 			if (!label) return;
 			extra_items.push({
 				label,
+				charge_type: $row.find(".sw-extra-type").val() || "Actual",
+				rate: Number($row.find(".sw-extra-rate").val()) || 0,
+				row_id: Number($row.find(".sw-extra-rowid").val()) || null,
 				amount: Number($row.find(".sw-extra-amount").val()) || 0
 			});
 		});
@@ -1189,11 +1195,26 @@ $panels.html(`
 		// row); Save/Recalculate below picks up whatever rows are currently
 		// in the DOM via collect_cost_payload and persists the whole set.
 		$panels.find("#swAddExtraItem").on("click", () => {
-			$panels.find("#swExtraItems").append(extraItemRowHtml({ label: "", amount: 0 }, true));
+			const rowNumber = $panels.find(".sw-extra-row").length + 1;
+			$panels.find("#swExtraItems").append(extraItemRowHtml({ label: "", charge_type: "Actual", amount: 0 }, true, rowNumber));
 			this.recalc_costing_preview($panels);
 		});
 		$panels.on("click", ".sw-extra-remove", (e) => {
 			$(e.currentTarget).closest(".sw-extra-row").remove();
+			renumberExtraRows($panels);
+			this.recalc_costing_preview($panels);
+		});
+		// Changing a row's Type toggles which inputs are relevant (Rate for
+		// anything but Actual, Reference Row only for the two "Previous
+		// Row" types) and whether Amount is user-typed or computed.
+		$panels.on("change", ".sw-extra-type", (e) => {
+			const $row = $(e.currentTarget).closest(".sw-extra-row");
+			const type = $(e.currentTarget).val();
+			const needsRate = type !== "Actual";
+			const needsRowRef = type === "On Previous Row Amount" || type === "On Previous Row Total";
+			$row.find(".sw-extra-rate").css("visibility", needsRate ? "visible" : "hidden");
+			$row.find(".sw-extra-rowid").css("visibility", needsRowRef ? "visible" : "hidden");
+			$row.find(".sw-extra-amount").prop("readonly", needsRate);
 			this.recalc_costing_preview($panels);
 		});
 		// Live preview: every commercial input, and every extra item row,
@@ -1201,7 +1222,7 @@ $panels.html(`
 		// Save/Recalculate is still what persists it to the Style Cost
 		// Sheet, but the numbers on screen no longer wait for a round trip
 		// to reflect what's been typed.
-		$panels.on("input", "#swCmtRate, #swTesting, #swOverheadPct, #swMarginPct, #swBuyerTarget, .sw-extra-amount, .sw-extra-label", () => {
+		$panels.on("input", "#swCmtRate, #swTesting, #swOverheadPct, #swMarginPct, #swBuyerTarget, .sw-extra-amount, .sw-extra-label, .sw-extra-rate, .sw-extra-rowid", () => {
 			this.recalc_costing_preview($panels);
 		});
 		// Trim/packing prices always live on the Style BOM - editing them
@@ -1304,18 +1325,49 @@ $panels.html(`
 		const trims = Number(c.trims_amount) || 0;
 		const cmt = Number($panels.find("#swCmtRate").val()) || 0;
 		const testing = Number($panels.find("#swTesting").val()) || 0;
-		let extraTotal = 0;
+		const netTotal = fabric + trims + cmt + testing;
+
+		// Mirrors compute_extra_item_amounts() in style_cost_sheet.py row by
+		// row, top to bottom, so a row can only ever reference one above it.
+		const resolved = [];
+		const runningTotals = [];
+		let running = netTotal;
 		let extraCount = 0;
-		$panels.find(".sw-extra-row").each((_, el) => {
+		$panels.find(".sw-extra-row").each((idx, el) => {
 			const $row = $(el);
 			const label = ($row.find(".sw-extra-label").val() || "").trim();
-			if (!label) return;
-			extraCount++;
-			extraTotal += Number($row.find(".sw-extra-amount").val()) || 0;
+			const chargeType = $row.find(".sw-extra-type").val() || "Actual";
+			const rate = Number($row.find(".sw-extra-rate").val()) || 0;
+			const rowId = Number($row.find(".sw-extra-rowid").val()) || 0;
+			let amount = 0;
+			if (label) {
+				extraCount++;
+				if (chargeType === "On Net Total") {
+					amount = netTotal * rate / 100.0;
+				} else if (chargeType === "On Item Quantity") {
+					amount = rate;
+				} else if (chargeType === "On Previous Row Amount" || chargeType === "On Previous Row Total") {
+					const refIdx = rowId - 1;
+					if (refIdx >= 0 && refIdx < idx) {
+						const base = chargeType === "On Previous Row Amount" ? resolved[refIdx] : runningTotals[refIdx];
+						amount = (base || 0) * rate / 100.0;
+					}
+				} else {
+					amount = Number($row.find(".sw-extra-amount").val()) || 0;
+				}
+				if (chargeType !== "Actual") {
+					$row.find(".sw-extra-amount").val(amount ? amount.toFixed(2) : "0.00");
+				}
+			}
+			resolved.push(amount);
+			running += amount;
+			runningTotals.push(running);
 		});
+		const extraTotal = resolved.reduce((a, b) => a + b, 0);
+
 		const overheadPct = Number($panels.find("#swOverheadPct").val()) || 0;
-		const overhead = (fabric + trims + cmt + testing + extraTotal) * overheadPct / 100.0;
-		const total = fabric + trims + cmt + testing + extraTotal + overhead;
+		const overhead = (netTotal + extraTotal) * overheadPct / 100.0;
+		const total = netTotal + extraTotal + overhead;
 		const margin = Number($panels.find("#swMarginPct").val()) || 0;
 		const selling = margin < 100 ? total / (1 - margin / 100.0) : total;
 		const target = Number($panels.find("#swBuyerTarget").val()) || 0;
@@ -1434,6 +1486,7 @@ $panels.html(`
 				<div class="sw-card-h">
 					<h2>Activities</h2>
 					<div class="right">
+						<button class="sw-btn sw-btn-sm" id="swSyncTnaActivities" title="Tick off Design &amp; Tech Pack / Costing / Sampling milestones from their real status elsewhere in the workspace">Fetch activities</button>
 						<button class="sw-btn sw-btn-sm" id="swAddTnaActivity">+ Add activity</button>
 						<button class="sw-btn sw-btn-sm" id="swRescheduleTna">Reschedule</button>
 					</div>
@@ -1448,6 +1501,24 @@ $panels.html(`
 	}
 
 	bind_tna_tab($panels) {
+		$panels.find("#swSyncTnaActivities").on("click", () => {
+			frappe.dom.freeze("Fetching…");
+			frappe.call({
+				method: "apparel_erp.product_development.doctype.style_tna.style_tna.sync_tna_activities_from_style",
+				args: { style: this.style.name },
+				callback: (r) => {
+					frappe.dom.unfreeze();
+					this.workspace_tna = r.message;
+					this.tna_count = (this.workspace_tna.activities || []).length;
+					const marked = (r.message && r.message.newly_marked) || [];
+					sw_toast(this.wrapper, marked.length
+						? `Marked done from the workspace: ${marked.join(", ")}.`
+						: "No new completions to fetch - already up to date.");
+					this.paint_tna_tab($panels);
+				},
+				error: () => frappe.dom.unfreeze()
+			});
+		});
 		$panels.find("#swAddTnaActivity").on("click", () => this.prompt_add_tna_activity($panels));
 		$panels.find("#swRescheduleTna").on("click", () => {
 			frappe.confirm(
@@ -2037,27 +2108,46 @@ function sw_toast(wrapper, msg) {
 	$t.data("tt", setTimeout(() => $t.removeClass("on"), 3200));
 }
 
-function extraItemRowHtml(row, editable) {
+const EXTRA_ITEM_CHARGE_TYPES = ["Actual", "On Net Total", "On Previous Row Amount", "On Previous Row Total", "On Item Quantity"];
+
+function extraItemRowHtml(row, editable, rowNumber) {
 	// row.name (a saved child row's docname) keys an existing row so a
 	// remove click can target it precisely; a freshly-added blank row (no
 	// name yet) gets a client-only key instead. Either way collect_cost_
 	// payload just reads whatever rows are currently in the DOM.
 	const key = row.name || row.key || ("new-" + frappe.utils.get_random(8));
 	const label = row.label ? frappe.utils.escape_html(row.label) : "";
+	const chargeType = row.charge_type || "Actual";
+	const rate = row.rate != null ? row.rate : "";
+	const rowId = row.row_id != null ? row.row_id : "";
 	const amount = row.amount != null ? row.amount : "";
-	return `<div class="sw-extra-row" data-row-key="${key}" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-		<input type="text" class="sw-cell sw-extra-label" placeholder="e.g. Freight surcharge" value="${label}" style="flex:2" ${editable ? "" : "readonly"}>
-		<input type="number" step="0.01" min="0" class="sw-cell sw-extra-amount" placeholder="0.00" value="${amount}" style="flex:1" ${editable ? "" : "readonly"}>
-		${editable ? `<button type="button" class="sw-btn sw-btn-sm sw-extra-remove" title="Remove item">×</button>` : ""}
-	</div>`;
+	const needsRate = chargeType !== "Actual";
+	const needsRowRef = chargeType === "On Previous Row Amount" || chargeType === "On Previous Row Total";
+	const typeOptions = EXTRA_ITEM_CHARGE_TYPES.map(t => `<option value="${t}" ${chargeType === t ? "selected" : ""}>${t}</option>`).join("");
+	return `<tr class="sw-extra-row" data-row-key="${key}">
+		<td class="sw-extra-n">${rowNumber}</td>
+		<td><input type="text" class="sw-cell sw-extra-label" placeholder="e.g. Freight surcharge" value="${label}" ${editable ? "" : "readonly"}></td>
+		<td><select class="sw-cell sw-extra-type" ${editable ? "" : "disabled"}>${typeOptions}</select></td>
+		<td class="num"><input type="number" step="0.01" class="sw-cell sw-extra-rate" placeholder="%" value="${rate}" style="${needsRate ? "" : "visibility:hidden"}" ${editable ? "" : "readonly"}></td>
+		<td class="num"><input type="number" step="1" min="1" max="${Math.max(rowNumber - 1, 1)}" class="sw-cell sw-extra-rowid" placeholder="row #" value="${rowId}" style="${needsRowRef ? "" : "visibility:hidden"}" ${editable ? "" : "readonly"}></td>
+		<td class="num"><input type="number" step="0.01" class="sw-cell sw-extra-amount" placeholder="0.00" value="${amount}" ${(needsRate || !editable) ? "readonly" : ""}></td>
+		<td>${editable ? `<button type="button" class="sw-btn sw-btn-sm sw-extra-remove" title="Remove item">×</button>` : ""}</td>
+	</tr>`;
 }
 
 function extraItemRows(items, editable) {
 	const rows = items && items.length ? items : [];
 	if (!rows.length) {
-		return editable ? "" : `<div class="sw-empty">No extra items.</div>`;
+		return editable ? "" : `<tr><td colspan="7" class="sw-empty">No extra items.</td></tr>`;
 	}
-	return rows.map(r => extraItemRowHtml(r, editable)).join("");
+	return rows.map((r, i) => extraItemRowHtml(r, editable, i + 1)).join("");
+}
+
+function renumberExtraRows($panels) {
+	$panels.find(".sw-extra-row").each((i, el) => {
+		$(el).find(".sw-extra-n").text(i + 1);
+		$(el).find(".sw-extra-rowid").attr("max", Math.max(i, 1));
+	});
 }
 
 function gap_pill_html(fmt, selling, target) {
@@ -2137,6 +2227,13 @@ const SW_CSS = `
 .sw-f input:focus,.sw-f select:focus{border-color:var(--sw-accent);outline:none}
 .sw-f input[readonly],.sw-f select:disabled{background:#F8FAFC;color:var(--sw-ink-2)}
 .sw-cell{width:76px;padding:4px 6px;border:1px solid var(--sw-line-2);border-radius:4px;text-align:right;font:inherit}
+.sw-extra-table{width:100%;border-collapse:collapse;font-size:13px}
+.sw-extra-table th{text-align:left;font-weight:500;color:var(--sw-ink-2);font-size:11px;padding:4px 4px}
+.sw-extra-table td{padding:3px 4px}
+.sw-extra-table .sw-extra-n{color:var(--sw-ink-2);width:18px}
+.sw-extra-table .sw-extra-label{width:100%;text-align:left}
+.sw-extra-table .sw-extra-type{width:100%;text-align:left}
+.sw-extra-table .sw-extra-rate,.sw-extra-table .sw-extra-rowid,.sw-extra-table .sw-extra-amount{width:64px}
 .sw-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .sw-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
 @media(max-width:1000px){.sw-grid2,.sw-grid3{grid-template-columns:1fr}}

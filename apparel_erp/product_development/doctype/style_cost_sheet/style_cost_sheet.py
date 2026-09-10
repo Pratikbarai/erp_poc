@@ -3,7 +3,7 @@ import json
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
 from apparel_erp.product_development.doctype.style.style import STYLE_STAGE_STATUSES
 from apparel_erp.product_development.doctype.style_bom.style_bom import (
@@ -66,8 +66,15 @@ def compute_cost_amounts(doc, bom_costs=None):
 	# User-added ad-hoc commercial line items (freight surcharge, sample
 	# fee, etc.) - as many as the user wants, added on the Costing tab.
 	# They're direct cost, same as CMT/testing, so they feed into overhead
-	# and total the same way.
-	extra = sum(flt(row.amount) for row in (doc.get("extra_items") or []))
+	# and total the same way. Each row's own amount is resolved from its
+	# Type first (Actual/On Net Total/On Previous Row Amount/On Previous
+	# Row Total/On Item Quantity) and written back onto the row, exactly
+	# like ERPNext's own Sales/Purchase Taxes and Charges "Type" column.
+	net_total = fabric + trims + cmt + testing
+	resolved_extra = compute_extra_item_amounts(doc, net_total)
+	for row, amount in zip(doc.get("extra_items") or [], resolved_extra):
+		row.amount = amount
+	extra = sum(resolved_extra)
 	overhead_pct = flt(doc.overhead_pct)
 	overhead = (fabric + trims + cmt + testing + extra) * overhead_pct / 100.0
 	total = fabric + trims + cmt + testing + extra + overhead
@@ -83,6 +90,55 @@ def compute_cost_amounts(doc, bom_costs=None):
 		"total_cost": total,
 		"selling_price": selling,
 	}
+
+
+def compute_extra_item_amounts(doc, net_total):
+	"""Resolve every Extra Item row's amount from its charge_type, mirroring
+	ERPNext's Sales/Purchase Taxes and Charges "Type" pattern applied to
+	this cost sheet's commercial line items:
+
+	  - Actual: the row's own Amount / pc is entered directly and used as-is.
+	  - On Net Total: Rate% of net_total (fabric + trims + CMT + testing -
+	    the direct cost BEFORE any extra item or overhead).
+	  - On Previous Row Amount: Rate% of one specific EARLIER row's own
+	    resolved amount, chosen via that row's 1-based position (row_id).
+	  - On Previous Row Total: Rate% of the running total through that
+	    earlier row (net_total + every extra item amount up to and
+	    including it).
+	  - On Item Quantity: Rate x quantity. This cost sheet is entirely
+	    per-piece, so quantity is always 1 here - behaves like Actual
+	    entered via a Rate field, kept for parity with the familiar
+	    ERPNext charge-type list and to leave room for a real per-order
+	    quantity later.
+
+	Rows are resolved strictly top-to-bottom, so a row can only reference
+	one above it - never itself or one below (prevents circular refs)."""
+	rows = doc.get("extra_items") or []
+	resolved = []
+	running_totals = []
+	running = net_total
+	for idx, row in enumerate(rows):
+		charge_type = row.get("charge_type") or "Actual"
+		rate = flt(row.get("rate"))
+		if charge_type == "On Net Total":
+			amount = net_total * rate / 100.0
+		elif charge_type == "On Item Quantity":
+			amount = rate
+		elif charge_type in ("On Previous Row Amount", "On Previous Row Total"):
+			ref_pos = cint(row.get("row_id"))
+			ref_idx = ref_pos - 1
+			if ref_pos < 1 or ref_idx >= idx:
+				frappe.throw(_(
+					"Extra item row {0} ('{1}'): \"Reference Row\" must point to an earlier row (1 to {2})."
+				).format(idx + 1, row.get("label") or "", idx))
+			base = resolved[ref_idx] if charge_type == "On Previous Row Amount" else running_totals[ref_idx]
+			amount = base * rate / 100.0
+		else:
+			amount = flt(row.get("amount"))
+		resolved.append(amount)
+		running += amount
+		running_totals.append(running)
+	return resolved
 
 
 def serialize_cost_sheet(doc, bom_meta=None, tech_pack=None, bom_costs=None):
@@ -118,7 +174,14 @@ def serialize_cost_sheet(doc, bom_meta=None, tech_pack=None, bom_costs=None):
 		"fabric_qty": bom_costs.get("fabric_qty") or 0,
 		"fabric_rate": bom_costs.get("fabric_rate") or 0,
 		"extra_items": [
-			{"name": row.name, "label": row.label, "amount": row.amount}
+			{
+				"name": row.name,
+				"label": row.label,
+				"charge_type": row.charge_type or "Actual",
+				"rate": row.rate,
+				"row_id": row.row_id,
+				"amount": row.amount,
+			}
 			for row in (doc.get("extra_items") or [])
 		],
 		"bom": bom_meta,
@@ -238,6 +301,12 @@ def save_workspace_cost_sheet(style, payload=None):
 				continue
 			doc.append("extra_items", {
 				"label": label,
+				"charge_type": row.get("charge_type") or "Actual",
+				"rate": flt(row.get("rate")),
+				"row_id": cint(row.get("row_id")) or None,
+				# Recomputed by apply_computed_totals() on save regardless
+				# of Type - sent through so an Actual row's typed value
+				# round-trips even before the next save recalculates it.
 				"amount": flt(row.get("amount")),
 			})
 

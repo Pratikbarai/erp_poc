@@ -15,11 +15,34 @@
       "description": "Free-text description of this commercial line item, e.g. 'Freight surcharge' or 'Sample fee'."
     },
     {
+      "fieldname": "charge_type",
+      "fieldtype": "Select",
+      "label": "Type",
+      "options": "Actual\nOn Net Total\nOn Previous Row Amount\nOn Previous Row Total\nOn Item Quantity",
+      "default": "Actual",
+      "in_list_view": 1,
+      "description": "Actual: enter Amount / pc directly. On Net Total: Rate % of fabric+trims+CMT+testing (before other extra items/overhead). On Previous Row Amount: Rate % of one earlier row's own resolved amount (set Reference Row). On Previous Row Total: Rate % of the running total through that earlier row. On Item Quantity: Rate x quantity - this cost sheet is per-piece throughout, so quantity is always 1 here."
+    },
+    {
+      "fieldname": "rate",
+      "fieldtype": "Float",
+      "label": "Rate",
+      "precision": "2",
+      "description": "Percentage for On Net Total / On Previous Row Amount / On Previous Row Total. Flat per-piece rate for On Item Quantity. Unused for Actual."
+    },
+    {
+      "fieldname": "row_id",
+      "fieldtype": "Int",
+      "label": "Reference Row",
+      "description": "1-based row number of an EARLIER extra item row in this same table. Required for On Previous Row Amount / On Previous Row Total; unused otherwise."
+    },
+    {
       "fieldname": "amount",
       "fieldtype": "Currency",
       "label": "Amount / pc",
       "options": "currency",
-      "in_list_view": 1
+      "in_list_view": 1,
+      "description": "Entered directly for Actual rows. Computed and overwritten on save for every other Type."
     }
   ],
   "permissions": []
