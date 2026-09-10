@@ -317,15 +317,16 @@ class StyleWorkspace {
 						<div class="sw-card-b">
 							<div class="sw-f">
 								<label>Generate BOM at</label>
-								<select id="swBomStage" ${s.bom_generation_stage ? "disabled" : ""}>
-									<option value="Design & Tech Pack" ${(s.bom_generation_stage || "Sampling") === "Design & Tech Pack" ? "selected" : ""}>Design & Tech Pack</option>
-									<option value="Costing" ${(s.bom_generation_stage || "Sampling") === "Costing" ? "selected" : ""}>Costing</option>
-									<option value="Sampling" ${(s.bom_generation_stage || "Sampling") === "Sampling" ? "selected" : ""}>Sampling</option>
+								<select id="swBomStage">
+									<option value="" ${!s.bom_generation_stage ? "selected" : ""} disabled>Select a stage\u2026</option>
+									<option value="Design & Tech Pack" ${s.bom_generation_stage === "Design & Tech Pack" ? "selected" : ""}>Design & Tech Pack</option>
+									<option value="Costing" ${s.bom_generation_stage === "Costing" ? "selected" : ""}>Costing</option>
+									<option value="Sampling" ${s.bom_generation_stage === "Sampling" ? "selected" : ""}>Sampling</option>
 								</select>
 							</div>
 							<div class="sw-note">${s.bom_generation_stage
-								? `Locked to <b>${frappe.utils.escape_html(s.bom_generation_stage)}</b> - this is a one-time choice and can't be changed once set.`
-								: `The "Generate BOM" action only appears on the tab matching this choice, so the person driving that stage is the one who kicks off the Style BOM. Choose carefully - it locks once saved.`}</div>
+								? `The "Generate BOM" action currently appears on the <b>${frappe.utils.escape_html(s.bom_generation_stage)}</b> tab. You can change this at any time - the next Style BOM generated will follow whatever is selected here.`
+								: `Choose which stage's tab should show the "Generate BOM" action. Nothing will generate until a stage is selected here.`}</div>
 						</div>
 					</div>
 				</div>
@@ -339,7 +340,14 @@ class StyleWorkspace {
 
 	bind_info($panels) {
 		$panels.find("#swBomStage").on("change", (e) => {
-			this.save_bom_generation_stage($(e.currentTarget).val());
+			const $select = $(e.currentTarget);
+			const stage = $select.val();
+			if (!stage) return;
+			const previous = this.style.bom_generation_stage;
+			this.confirm_bom_stage_change(stage, previous, null, () => {
+				// Reverted - put the select back to whatever was saved before.
+				$select.val(previous || "");
+			});
 		});
 		// "Apparel order" row only appears once a T&A schedule with a PO
 		// actually exists - matches the prototype, and avoids implying an
@@ -372,7 +380,10 @@ class StyleWorkspace {
 
 	// ---------- Generate BOM (Design & Tech / Costing / Sampling) ----------
 	bom_stage_label() {
-		return this.style.bom_generation_stage || "Sampling";
+		// No default - returns falsy until the user explicitly chooses a
+		// stage on the Info tab. Freely re-selectable afterwards; whatever
+		// it's currently set to is what the next "Generate BOM" click uses.
+		return this.style.bom_generation_stage || "";
 	}
 
 	save_bom_generation_stage(stage, onDone) {
@@ -383,10 +394,43 @@ class StyleWorkspace {
 			callback: () => {
 				frappe.dom.unfreeze();
 				this.style.bom_generation_stage = stage;
-				sw_toast(this.wrapper, `BOM will now be generated at the ${stage} stage.`);
+				sw_toast(this.wrapper, `BOM will now be generated at the ${stage} stage. Any BOM generated from here on follows this choice.`);
 				if (onDone) onDone();
 			},
 			error: () => frappe.dom.unfreeze()
+		});
+	}
+
+	confirm_bom_stage_change(stage, previous, onSaved, onCancelled) {
+		// Switching stages is safe on its own - the choice just controls
+		// which tab shows "Generate BOM" and which gate the next click has
+		// to pass. But if this style already has its OWN Style BOM (not one
+		// inherited from a Base Style), that BOM was generated under the
+		// old choice and won't be touched or regenerated automatically by
+		// this change, so warn before letting it through.
+		if (!previous || previous === stage) {
+			this.save_bom_generation_stage(stage, onSaved);
+			return;
+		}
+		frappe.call({
+			method: "apparel_erp.product_development.doctype.style_bom.style_bom.get_workspace_style_bom",
+			args: { style: this.style.name }
+		}).then((r) => {
+			const bom = r.message || {};
+			const has_own_bom = bom.name && !bom.inherited_from;
+			if (!has_own_bom) {
+				this.save_bom_generation_stage(stage, onSaved);
+				return;
+			}
+			const state = bom.docstatus === 1 ? "submitted" : "draft";
+			frappe.confirm(
+				`${frappe.utils.escape_html(this.style.style_no || this.style.name)} already has a ${state} Style BOM ` +
+				`(<b>${frappe.utils.escape_html(bom.name)}</b>), generated while "Generate BOM at" was set to <b>${frappe.utils.escape_html(previous)}</b>. ` +
+				`Switching to <b>${frappe.utils.escape_html(stage)}</b> will <b>not</b> automatically update or regenerate that BOM - ` +
+				`you'll need to amend/regenerate it yourself if it should reflect the new stage. Continue?`,
+				() => this.save_bom_generation_stage(stage, onSaved),
+				() => { if (onCancelled) onCancelled(); }
+			);
 		});
 	}
 
@@ -400,10 +444,14 @@ class StyleWorkspace {
 		// Shown on the tabs that are NOT the chosen generation stage, so
 		// whoever is on Tech Pack/Costing/Sampling always understands why
 		// the "Generate BOM" button isn't sitting in front of them here -
-		// the style owner decided it should happen after a different
-		// stage, and this links straight to where that choice is made.
+		// either no stage has been chosen yet, or the style owner picked a
+		// different one - and this links straight to where that choice is
+		// made (and can still be changed).
 		const configured = this.bom_stage_label();
 		if (configured === stage) return "";
+		if (!configured) {
+			return `<span class="sw-pill sw-pill-mut sw-gen-bom-hint" title="Choose a stage on the Style information tab" style="cursor:pointer">Choose a BOM generation stage</span>`;
+		}
 		return `<span class="sw-pill sw-pill-mut sw-gen-bom-hint" title="Change this on the Style information tab" style="cursor:pointer">BOM generates after ${configured}</span>`;
 	}
 

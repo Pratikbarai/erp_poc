@@ -233,8 +233,7 @@
       "fieldname": "bom_generation_stage",
       "fieldtype": "Select",
       "label": "Generate BOM At",
-      "options": "Design & Tech Pack\nCosting\nSampling",
-      "default": "Sampling",
+      "options": "\nDesign & Tech Pack\nCosting\nSampling",
       "in_standard_filter": 1,
       "description": "Choose which stage should be responsible for triggering BOM generation for this style. The Style Workspace only surfaces the \"Generate BOM\" action on the matching tab."
     },

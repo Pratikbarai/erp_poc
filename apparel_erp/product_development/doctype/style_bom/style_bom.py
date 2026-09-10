@@ -34,7 +34,13 @@ def generate_style_bom_for_stage(style, stage):
 	kicking off its Style BOM - this enforces that choice server-side rather
 	than trusting the tab the click came from, and is idempotent: calling it
 	again just returns the existing Draft/submitted Style BOM instead of
-	creating duplicates."""
+	creating duplicates.
+
+	There is no default stage - the user must explicitly choose one on the
+	Style's Info tab first. That choice can also be changed later (it is no
+	longer locked once set); whatever it is currently set to is what governs
+	where "Generate BOM" is enabled and which gate applies the next time it's
+	clicked."""
 	if stage not in ("Design & Tech Pack", "Costing", "Sampling"):
 		frappe.throw(_("Unknown BOM generation stage {0}").format(stage))
 
@@ -42,11 +48,16 @@ def generate_style_bom_for_stage(style, stage):
 	if not frappe.has_permission("Style BOM", "create"):
 		frappe.throw(_("Not permitted to create Style BOM"))
 
-	configured_stage = style_doc.get("bom_generation_stage") or "Sampling"
+	configured_stage = style_doc.get("bom_generation_stage")
+	if not configured_stage:
+		frappe.throw(_(
+			"{0} doesn't have a \"Generate BOM at\" stage set yet. "
+			"Choose one on the Style's Info tab before generating the Style BOM."
+		).format(style))
 	if configured_stage != stage:
 		frappe.throw(_(
-			"{0} is configured to generate its BOM at the <b>{1}</b> stage, not {2}. "
-			"Change \"Generate BOM At\" on the Style if you want to trigger it from here instead."
+			"{0} is currently set to generate its BOM at the <b>{1}</b> stage, not {2}. "
+			"Change \"Generate BOM At\" on the Style's Info tab if you want to trigger it from here instead."
 		).format(style, configured_stage, stage))
 
 	_assert_stage_complete(style_doc, stage)
