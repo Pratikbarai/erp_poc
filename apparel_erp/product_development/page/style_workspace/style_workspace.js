@@ -225,6 +225,7 @@ class StyleWorkspace {
 				</div>
 				<div class="sw-tabs" id="swTabs">
 					<button data-t="info" class="${this.active_tab === "info" ? "on" : ""}">Style information</button>
+					<button data-t="order" class="${this.active_tab === "order" ? "on" : ""}">Order${this.order_qty_count ? `<span class="sw-count">${this.order_qty_count}</span>` : ""}</button>
 					<button data-t="colours" class="${this.active_tab === "colours" ? "on" : ""}">Colours &amp; sizes<span class="sw-count">${(s.matrix_items || []).length}</span></button>
 					<button data-t="bom" class="${this.active_tab === "bom" ? "on" : ""}">Style BOM</button>
 					<button data-t="techpack" class="${this.active_tab === "techpack" ? "on" : ""}">Tech pack</button>
@@ -252,6 +253,7 @@ class StyleWorkspace {
 		const s = this.style;
 		const $panels = $(this.wrapper).find("#swPanels");
 		if (this.active_tab === "info") { $panels.html(this.tpl_info(s)); this.bind_info($panels); }
+		else if (this.active_tab === "order") { this.render_order_tab($panels); }
 		else if (this.active_tab === "colours") { $panels.html(this.tpl_colours(s)); this.bind_colours(); }
 		else if (this.active_tab === "bom") { this.render_bom_tab($panels); }
 		else if (this.active_tab === "techpack") this.render_techpack_tab($panels);
@@ -349,17 +351,29 @@ class StyleWorkspace {
 				$select.val(previous || "");
 			});
 		});
-		// "Apparel order" row only appears once a T&A schedule with a PO
-		// actually exists - matches the prototype, and avoids implying an
-		// order is on file when nobody has set one up yet.
+		// "Apparel order" row only appears once there's a real PO on file -
+		// Apparel Order is now the authoritative source (spec Layer 2), but
+		// fall back to whatever's on the T&A schedule for styles that only
+		// have that (set up before Apparel Order existed).
 		frappe.call({
-			method: "apparel_erp.product_development.doctype.style_tna.style_tna.get_workspace_tna",
+			method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.get_workspace_order",
 			args: { style: this.style.name }
 		}).then((r) => {
-			const t = r.message;
-			if (!t || !t.po_reference) return;
-			const label = t.po_qty ? `${frappe.utils.escape_html(t.po_reference)} \u00b7 ${Number(t.po_qty).toLocaleString()} pcs` : frappe.utils.escape_html(t.po_reference);
-			$panels.find("#swApparelOrderRow").replaceWith(sw_attr_link("Apparel order", label, () => this.switch_tab("tna")));
+			const o = r.message;
+			if (o && o.buyer_po) {
+				const label = `${frappe.utils.escape_html(o.buyer_po)} \u00b7 ${Number(o.total_quantity || 0).toLocaleString()} pcs`;
+				$panels.find("#swApparelOrderRow").replaceWith(sw_attr_link("Apparel order", label, () => this.switch_tab("order")));
+				return;
+			}
+			frappe.call({
+				method: "apparel_erp.product_development.doctype.style_tna.style_tna.get_workspace_tna",
+				args: { style: this.style.name }
+			}).then((r2) => {
+				const t = r2.message;
+				if (!t || !t.po_reference) return;
+				const label = t.po_qty ? `${frappe.utils.escape_html(t.po_reference)} \u00b7 ${Number(t.po_qty).toLocaleString()} pcs` : frappe.utils.escape_html(t.po_reference);
+				$panels.find("#swApparelOrderRow").replaceWith(sw_attr_link("Apparel order", label, () => this.switch_tab("tna")));
+			});
 		});
 	}
 
@@ -573,7 +587,7 @@ class StyleWorkspace {
 			frappe.set_route("Form", "Item", $(e.currentTarget).data("item"));
 		});
 		$panels.find(".sw-sku-gen").on("click", (e) => {
-			this.point_to_style_bom_generation();
+			this.generate_all_skus();
 		});
 		$panels.find(".sw-matrix-status").on("click", (e) => {
 			const matrix_item = $(e.currentTarget).data("row");
@@ -598,7 +612,7 @@ class StyleWorkspace {
 		$panels.find("#swGenAll").on("click", () => {
 			const pending = (this.style.matrix_items || []).filter(m => m.status !== "Active" || !m.item);
 			if (!pending.length) { sw_toast(this.wrapper, "All SKUs are already generated."); return; }
-			this.point_to_style_bom_generation();
+			this.generate_all_skus();
 		});
 
 		$panels.find("#swAddColour").on("click", () => this.add_colour());
@@ -676,23 +690,228 @@ class StyleWorkspace {
 		});
 	}
 
-	point_to_style_bom_generation() {
-		// Generation now happens on the Style BOM document (gated: Style
-		// Confirmed, PP approved, Lab Dip approved per colourway, etc) and
-		// covers every approved colourway in one go - not per matrix cell.
+	generate_all_skus() {
 		frappe.call({
-			method: "apparel_erp.product_development.doctype.style.style.get_latest_style_bom",
+			method: "apparel_erp.product_development.doctype.style_bom.style_bom.get_workspace_style_bom",
 			args: { style: this.style.name }
 		}).then((r) => {
-			if (r.message && r.message.name && !r.message.inherited_from) {
-				frappe.set_route("Form", "Style BOM", r.message.name);
-			} else {
+			const info = r.message || {};
+
+			if (!info.name || info.inherited_from) {
 				frappe.confirm(
 					"No Style BOM of its own exists for this Style yet. Create one now?",
 					() => frappe.new_doc("Style BOM", { style: this.style.name, bom_type: "Development" })
 				);
+				return;
+			}
+
+			if (info.docstatus !== 1) {
+				frappe.confirm(
+					`The current Style BOM (<b>${frappe.utils.escape_html(info.name)}</b>) is still a Draft - nothing can be generated from it until it's submitted. Open it now to finish and submit?`,
+					() => frappe.set_route("Form", "Style BOM", info.name)
+				);
+				return;
+			}
+
+			if (info.bom_type !== "Bulk") {
+				frappe.confirm(
+					`The current Style BOM (<b>${frappe.utils.escape_html(info.name)}</b>) is submitted as <b>${frappe.utils.escape_html(info.bom_type || "Development")}</b> - only a <b>Bulk</b> Style BOM can generate production BOMs and SKUs. Amend it and switch the type now?`,
+					() => frappe.set_route("Form", "Style BOM", info.name)
+				);
+				return;
+			}
+
+			// Submitted + Bulk: the real thing can actually run, right here -
+			// no need to send the user to the Style BOM form at all. The
+			// form itself will throw a clear error if bom_generation_mode
+			// (Per Colourway / Per SKU) hasn't been chosen yet - no need to
+			// duplicate that check here.
+			frappe.confirm(
+				`Generate production BOMs and SKUs for every Active, Approved-for-Production colourway on ${frappe.utils.escape_html(this.style.style_no || this.style.name)}? Gates (Style Confirmed, PP approval, Lab Dip approvals) will be checked first.`,
+				() => {
+					frappe.dom.freeze("Checking gates and generating…");
+					frappe.call({
+						method: "apparel_erp.product_development.doctype.style_bom.style_bom.generate_production_boms",
+						args: { style_bom_name: info.name },
+						callback: (r2) => {
+							frappe.dom.unfreeze();
+							const count = (r2.message || {}).count || 0;
+							sw_toast(this.wrapper, `Generated/confirmed ${count} BOM(s).`);
+							this.load_style(this.style.name);
+							setTimeout(() => this.switch_tab("colours"), 50);
+						},
+						error: () => frappe.dom.unfreeze()
+					});
+				}
+			);
+		});
+	}
+
+	// ---------- Order (Buyer PO + Order Matrix) ----------
+	render_order_tab($panels) {
+		$panels.html(`<div class="sw-loading">Loading order…</div>`);
+		frappe.call({
+			method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.get_workspace_order",
+			args: { style: this.style.name }
+		}).then((r) => {
+			this.workspace_order = r.message || null;
+			this.order_qty_count = this.workspace_order ? this.workspace_order.total_quantity : 0;
+			$(this.wrapper).find(`#swTabs button[data-t="order"] .sw-count`).remove();
+			if (this.order_qty_count) {
+				$(this.wrapper).find(`#swTabs button[data-t="order"]`).append(`<span class="sw-count">${this.order_qty_count.toLocaleString()}</span>`);
+			}
+			this.paint_order_tab($panels);
+		});
+	}
+
+	paint_order_tab($panels) {
+		const o = this.workspace_order;
+		if (!o) {
+			$panels.html(`
+				<div class="sw-card">
+					<div class="sw-card-b">
+						<div class="sw-empty">No Buyer PO / Order Matrix set up yet for this style.</div>
+						<button class="sw-btn sw-btn-pri sw-btn-sm" id="swCreateOrder" style="margin-top:10px">Set up Buyer PO</button>
+					</div>
+				</div>
+			`);
+			$panels.find("#swCreateOrder").on("click", () => this.prompt_create_order($panels));
+			return;
+		}
+
+		// Pivot the flat colour x size rows into a grid for editing, matching
+		// the worked example table (rows = colours, columns = sizes).
+		const colours = [];
+		const sizes = [];
+		const qtyByKey = {};
+		(o.order_matrix || []).forEach((row) => {
+			const ck = row.colour_code || row.colour_name || "";
+			const sk = row.size_code || "";
+			if (!colours.some(c => c.code === ck)) colours.push({ code: ck, name: row.colour_name || ck });
+			if (!sizes.includes(sk)) sizes.push(sk);
+			qtyByKey[`${ck}::${sk}`] = row.quantity || 0;
+		});
+
+		let colTotal = {};
+		sizes.forEach(sk => { colTotal[sk] = 0; });
+		colours.forEach(c => {
+			sizes.forEach(sk => { colTotal[sk] += qtyByKey[`${c.code}::${sk}`] || 0; });
+		});
+		const grandTotal = Object.values(colTotal).reduce((a, b) => a + b, 0);
+
+		let grid;
+		if (!colours.length || !sizes.length) {
+			grid = `<div class="sw-empty" style="padding:16px">This style has no active colours/sizes yet to build a matrix from. Add them on the Colours &amp; Sizes tab first.</div>`;
+		} else {
+			grid = `<table><thead><tr><th>Colour / Size</th>${sizes.map(sk => `<th class="num">${frappe.utils.escape_html(sk)}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>`;
+			colours.forEach((c) => {
+				let rowTotal = 0;
+				const cells = sizes.map((sk) => {
+					const qty = qtyByKey[`${c.code}::${sk}`] || 0;
+					rowTotal += qty;
+					return `<td class="num"><input class="sw-cell" data-order-qty data-colour="${frappe.utils.escape_html(c.code)}" data-colour-name="${frappe.utils.escape_html(c.name)}" data-size="${frappe.utils.escape_html(sk)}" type="number" min="0" step="1" value="${qty}" style="width:70px;text-align:right"></td>`;
+				}).join("");
+				grid += `<tr><td>${frappe.utils.escape_html(c.name)}</td>${cells}<td class="num"><b>${rowTotal.toLocaleString()}</b></td></tr>`;
+			});
+			grid += `<tr><td><b>Total</b></td>${sizes.map(sk => `<td class="num"><b>${(colTotal[sk] || 0).toLocaleString()}</b></td>`).join("")}<td class="num"><b>${grandTotal.toLocaleString()}</b></td></tr>`;
+			grid += `</tbody></table>`;
+		}
+
+		const statusCls = { Draft: "pill-mut", Confirmed: "pill-info", "In Production": "pill-warn", Shipped: "pill-ok", Closed: "pill-ok", Cancelled: "pill-bad" }[o.status] || "pill-mut";
+
+		$panels.html(`
+			<div class="sw-card">
+				<div class="sw-card-b">
+					<div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start">
+						<div>
+							<div style="font-size:15px;font-weight:600">${frappe.utils.escape_html(o.buyer_po)}${o.customer ? ` · ${frappe.utils.escape_html(o.customer)}` : ""}</div>
+							<div style="color:var(--sw-ink-2);font-size:13px;margin-top:2px">${frappe.utils.escape_html(o.incoterm || "")} · ${frappe.utils.escape_html(o.currency || "")}${o.delivery_date ? ` · Delivery ${frappe.datetime.str_to_user(o.delivery_date)}` : ""}</div>
+						</div>
+						<div style="text-align:right">
+							<span class="pill ${statusCls}">${frappe.utils.escape_html(o.status || "Draft")}</span>
+							<div style="font-size:20px;font-weight:600;margin-top:4px">${grandTotal.toLocaleString()} <span style="font-size:12px;font-weight:400;color:var(--sw-ink-2)">pcs</span></div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="sw-card">
+				<div class="sw-card-h">
+					<h2>Order matrix</h2>
+					<div class="right">
+						<span class="sw-note" style="margin-right:8px">Only non-zero cells count as ordered - these drive BOM generation.</span>
+						<button class="sw-btn sw-btn-sm" id="swOpenOrderForm">Open full record</button>
+					</div>
+				</div>
+				${grid}
+				<button class="sw-btn sw-btn-pri" id="swSaveOrder" style="margin:12px 16px">Save order matrix</button>
+			</div>
+		`);
+		this.bind_order_tab($panels);
+	}
+
+	bind_order_tab($panels) {
+		$panels.find("#swOpenOrderForm").on("click", () => {
+			if (this.workspace_order && this.workspace_order.name) {
+				frappe.set_route("Form", "Apparel Order", this.workspace_order.name);
 			}
 		});
+		$panels.find("#swSaveOrder").on("click", () => {
+			const rows = [];
+			$panels.find("[data-order-qty]").each((_, el) => {
+				const $el = $(el);
+				rows.push({
+					colour_code: $el.data("colour"),
+					colour_name: $el.data("colour-name"),
+					size_code: $el.data("size"),
+					quantity: Number($el.val()) || 0
+				});
+			});
+			frappe.dom.freeze("Saving order matrix…");
+			frappe.call({
+				method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.save_workspace_order",
+				args: { style: this.style.name, payload: JSON.stringify({ order_matrix: rows }) },
+				callback: (r) => {
+					frappe.dom.unfreeze();
+					this.workspace_order = r.message;
+					this.order_qty_count = this.workspace_order.total_quantity;
+					this.paint_order_tab($panels);
+					sw_toast(this.wrapper, "Order matrix saved.");
+				},
+				error: () => frappe.dom.unfreeze()
+			});
+		});
+	}
+
+	prompt_create_order($panels) {
+		const d = new frappe.ui.Dialog({
+			title: "Set up Buyer PO",
+			fields: [
+				{ fieldname: "buyer_po", label: "Buyer PO", fieldtype: "Data", reqd: 1 },
+				{ fieldname: "customer", label: "Customer / Buyer", fieldtype: "Data" },
+				{ fieldname: "currency", label: "Currency", fieldtype: "Data", default: "INR" },
+				{ fieldname: "incoterm", label: "Incoterm", fieldtype: "Data", default: "FOB" },
+				{ fieldname: "delivery_date", label: "Delivery / Ex-factory Date", fieldtype: "Date" }
+			],
+			primary_action_label: "Create",
+			primary_action: (values) => {
+				frappe.dom.freeze("Creating…");
+				frappe.call({
+					method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.create_workspace_order",
+					args: { style: this.style.name, payload: JSON.stringify(values) },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						d.hide();
+						this.workspace_order = r.message;
+						this.order_qty_count = this.workspace_order.total_quantity;
+						this.paint_order_tab($panels);
+						sw_toast(this.wrapper, "Buyer PO created — fill in the order matrix and save.");
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			}
+		});
+		d.show();
 	}
 
 	// ---------- Style BOM ----------
@@ -872,7 +1091,7 @@ class StyleWorkspace {
 		});
 		$panels.find("#swAddBomItem").on("click", () => this.prompt_add_bom_item($panels));
 		$panels.find("#swAddOverride").on("click", () => this.prompt_add_bom_override($panels));
-		$panels.find(".sw-bom-x").on("click", (e) => {
+		$panels.find(".sw-x[data-line]").on("click", (e) => {
 			this.sync_size_factors($panels);
 			const id = $(e.currentTarget).data("line");
 			this.workspace_bom.lines = (this.workspace_bom.lines || []).filter((l) => l.line_id !== id);
@@ -1609,6 +1828,19 @@ $panels.html(`
 				});
 			}
 		});
+		// Prefill from an existing Apparel Order so the PO doesn't have to be
+		// typed twice - it just shows up here if it exists.
+		frappe.call({
+			method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.get_workspace_order",
+			args: { style: this.style.name }
+		}).then((r) => {
+			const o = r.message;
+			if (!o) return;
+			if (o.buyer_po) d.set_value("po_reference", o.buyer_po);
+			if (o.total_quantity) d.set_value("po_qty", o.total_quantity);
+			if (o.incoterm) d.set_value("incoterm", o.incoterm);
+			if (o.delivery_date) d.set_value("ex_factory_date", o.delivery_date);
+		});
 		d.show();
 	}
 
@@ -2250,7 +2482,6 @@ const SW_CSS = `
 .sw-chip-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--sw-line);border-radius:var(--sw-r-sm);margin-bottom:6px;background:#fff}
 .sw-x{color:var(--sw-ink-3);font-size:16px;line-height:1;cursor:pointer}
 .sw-x:hover{color:var(--sw-bad)}
-.sw-bom-x{display:inline-block}
 .sw-matrix{border-collapse:collapse}
 .sw-matrix td,.sw-matrix th{text-align:center;border:1px solid var(--sw-line);padding:7px 6px}
 .sw-matrix .sw-rowh{text-align:left;background:#F8FAFC;font-weight:500}

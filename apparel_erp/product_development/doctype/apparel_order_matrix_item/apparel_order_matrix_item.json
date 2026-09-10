@@ -1,0 +1,15 @@
+{
+ "doctype": "DocType",
+ "name": "Apparel Order Matrix Item",
+ "module": "Product Development",
+ "istable": 1,
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "colour_code", "fieldtype": "Data", "label": "Colour Code", "in_list_view": 1},
+  {"fieldname": "colour_name", "fieldtype": "Data", "label": "Colour", "in_list_view": 1},
+  {"fieldname": "size_code", "fieldtype": "Data", "label": "Size", "in_list_view": 1},
+  {"fieldname": "quantity", "fieldtype": "Int", "label": "Quantity", "default": "0", "in_list_view": 1}
+ ],
+ "permissions": []
+}
