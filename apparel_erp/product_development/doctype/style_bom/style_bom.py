@@ -274,7 +274,13 @@ def assert_gates_passed(style_doc, sb):
 		frappe.throw(_("Missing an approved Lab Dip Style Submission for colourway(s): {0}").format(", ".join(missing_lab_dip)))
 
 	for line in sb.lines:
-		if line.varies_by_size:
+		if line.varies_by_size and sb.get("bom_generation_mode") != "Per SKU (Colour x Size)":
+			# Only relevant to Per Colourway mode, which blends every size's
+			# consumption into one shared-BOM figure via a weighted average -
+			# that average needs either a Size Planning Ratio or a per-size
+			# override to mean anything. Per SKU mode resolves each size's
+			# own exact quantity directly (see _build_sku_bom) and never
+			# averages, so this check doesn't apply there.
 			ratios = get_size_ratio(style_doc)
 			has_ratio = any(r["ratio"] and r["ratio"] != 1 for r in ratios)
 			has_override_qty = any(
@@ -290,11 +296,28 @@ def assert_gates_passed(style_doc, sb):
 
 # ---------------------------------------------------------------------------
 # The generator (spec section 6) - generate per colourway, not per SKU.
+#
+# Two generation modes, chosen via Style BOM.bom_generation_mode (no
+# default - must be set explicitly before Generate Production BOMs runs):
+#
+#   Per Colourway (Material-wise): one shared BOM per colour, using a
+#   size-weighted AVERAGE consumption, attached to a non-sellable carrier
+#   Item. Fewer BOM documents; consumption is approximate per size.
+#
+#   Per SKU (Colour x Size): one exact BOM per colour x size cell, using
+#   that size's own resolved consumption (no averaging), attached directly
+#   to the real sellable SKU Item. More BOM documents; consumption is exact
+#   per size and plugs directly into standard ERPNext Sales Order /
+#   Production Plan / Work Order against the real Item.
 # ---------------------------------------------------------------------------
 
 @frappe.whitelist()
 def generate_production_boms(style_bom_name):
-	from apparel_erp.product_development.doctype.style.style import sync_matrix_for_colour_bom
+	from apparel_erp.product_development.doctype.style.style import (
+		sync_matrix_for_colour_bom,
+		ensure_matrix_sku_item,
+		sync_matrix_for_sku_bom,
+	)
 
 	sb = frappe.get_doc("Style BOM", style_bom_name)
 	style_doc = frappe.get_doc("Style", sb.style)
@@ -304,27 +327,45 @@ def generate_production_boms(style_bom_name):
 	if sb.bom_type != "Bulk":
 		frappe.throw(_("Only a Bulk Style BOM can generate production BOMs."))
 
+	mode = sb.get("bom_generation_mode")
+	if mode not in ("Per Colourway (Material-wise)", "Per SKU (Colour x Size)"):
+		frappe.throw(_(
+			"Choose a \"BOM Generation Mode\" on {0} - Per Colourway or Per SKU - before generating production BOMs."
+		).format(sb.name))
+
 	assert_gates_passed(style_doc, sb)
 
-	ratio = get_size_ratio(style_doc)
 	active_colourways = [c for c in style_doc.colours if (c.status or "Active") == "Active" and c.get("approved_for_production")]
 
 	generated = []
 	frappe.flags.in_style_bom_generation = True
 	try:
-		for cw in active_colourways:
-			colour_code = cw.colour_code or cw.colour_name
-			bom_name = _generate_or_branch_for_colourway(style_doc, sb, cw, colour_code, ratio)
-			if bom_name:
-				generated.append({"colourway": colour_code, "bom": bom_name})
-				# The BOM alone isn't enough - each colour x size cell still
-				# needs its own sellable SKU Item before the matrix (and the
-				# "Generate all SKUs" action) will show it as done. This has
-				# to run for every colourway that has a current BOM, whether
-				# it was just built or an existing one was left untouched by
-				# _generate_or_branch_for_colourway - both leave the matrix
-				# rows for this colour still pointing at a valid BOM.
-				sync_matrix_for_colour_bom(style_doc.name, colour_code, bom_name)
+		if mode == "Per SKU (Colour x Size)":
+			for cw in active_colourways:
+				colour_code = cw.colour_code or cw.colour_name
+				for size_row in style_doc.sizes:
+					size_code = frappe.db.get_value("Size", size_row.size, "size_code") or size_row.size
+					sku_item = ensure_matrix_sku_item(style_doc.name, colour_code, size_code)
+
+					def _build(cw=cw, colour_code=colour_code, size_code=size_code, sku_item=sku_item):
+						return _build_sku_bom(style_doc, sb, cw, colour_code, size_code, sku_item)
+
+					bom_name = _generate_or_branch(style_doc, sb, colour_code, size_code, _build)
+					if bom_name:
+						generated.append({"colourway": colour_code, "size": size_code, "bom": bom_name})
+						sync_matrix_for_sku_bom(style_doc.name, colour_code, size_code, bom_name)
+		else:
+			ratio = get_size_ratio(style_doc)
+			for cw in active_colourways:
+				colour_code = cw.colour_code or cw.colour_name
+
+				def _build(cw=cw, colour_code=colour_code):
+					return _build_colour_bom(style_doc, sb, cw, colour_code, ratio)
+
+				bom_name = _generate_or_branch(style_doc, sb, colour_code, None, _build)
+				if bom_name:
+					generated.append({"colourway": colour_code, "bom": bom_name})
+					sync_matrix_for_colour_bom(style_doc.name, colour_code, bom_name)
 	finally:
 		frappe.flags.in_style_bom_generation = False
 
@@ -332,13 +373,19 @@ def generate_production_boms(style_bom_name):
 	return {"generated": generated, "count": len(generated)}
 
 
-def _generate_or_branch_for_colourway(style_doc, sb, cw, colour_code, ratio):
+def _generate_or_branch(style_doc, sb, colour_code, size_code, build_fn):
 	"""Regeneration branching per spec 7.2: don't blindly regenerate. Branch
 	on the downstream state of any BOM already generated from this Style BOM
-	for this colourway."""
+	for this colourway (size_code=None, Per Colourway mode) or this exact
+	colourway x size cell (Per SKU mode)."""
 	existing_bom_name = frappe.db.get_value(
 		"BOM",
-		{"custom_style": style_doc.name, "custom_colourway": colour_code, "docstatus": ["<", 2]},
+		{
+			"custom_style": style_doc.name,
+			"custom_colourway": colour_code,
+			"custom_size": size_code or "",
+			"docstatus": ["<", 2],
+		},
 		"name",
 		order_by="creation desc",
 	)
@@ -351,7 +398,8 @@ def _generate_or_branch_for_colourway(style_doc, sb, cw, colour_code, ratio):
 		
 		if wo and wo.status in ("In Process", "Completed"):
 			_write_variance_register(style_doc, sb, colour_code, existing_bom_name,
-				reason=_("Work Order {0} is {1} - existing BOM left untouched.").format(wo.name, wo.status))
+				reason=_("Work Order {0} is {1} - existing BOM left untouched.").format(wo.name, wo.status),
+				size_code=size_code)
 			return existing_bom_name
 		if wo and (wo.produced_qty or 0) == 0:
 			# Submitted WO, nothing produced yet: safe to cancel WO + BOM and regenerate.
@@ -369,31 +417,33 @@ def _generate_or_branch_for_colourway(style_doc, sb, cw, colour_code, ratio):
 				old_bom.flags.ignore_permissions = True
 				old_bom.cancel()
 
-	bom_name = _build_colour_bom(style_doc, sb, cw, colour_code, ratio)
-	write_generation_log(sb, colour_code, bom_name)
+	bom_name = build_fn()
+	write_generation_log(sb, colour_code, bom_name, size_code=size_code)
 	return bom_name
 
 
-def _write_variance_register(style_doc, sb, colour_code, bom_name, reason):
+def _write_variance_register(style_doc, sb, colour_code, bom_name, reason, size_code=None):
 	frappe.get_doc({
 		"doctype": "Style BOM Generation Log",
 		"style_bom": sb.name,
 		"style_bom_version": sb.version,
 		"style": style_doc.name,
 		"colourway": colour_code,
+		"size": size_code,
 		"generated_bom": bom_name,
 		"is_variance": 1,
 		"note": reason,
 	}).insert(ignore_permissions=True)
 
 
-def write_generation_log(sb, colour_code, bom_name):
+def write_generation_log(sb, colour_code, bom_name, size_code=None):
 	frappe.get_doc({
 		"doctype": "Style BOM Generation Log",
 		"style_bom": sb.name,
 		"style_bom_version": sb.version,
 		"style": sb.style,
 		"colourway": colour_code,
+		"size": size_code,
 		"generated_bom": bom_name,
 	}).insert(ignore_permissions=True)
 
@@ -460,6 +510,66 @@ def _build_colour_bom(style_doc, sb, cw, colour_code, ratio):
 	bom.custom_style_bom = sb.name
 	bom.custom_style_bom_version = sb.version
 	bom.custom_colourway = colour_code
+	bom.insert(ignore_permissions=True)
+	bom.submit()
+	return bom.name
+
+
+def _build_sku_bom(style_doc, sb, cw, colour_code, size_code, sku_item):
+	"""Per-SKU counterpart to _build_colour_bom (spec section 4/5, RESOLVE
+	step): resolves every line's exact quantity for this one colour x size
+	cell directly - no weighted averaging across sizes. A per-size Style
+	BOM Override still wins if one is set for this line/colourway/size;
+	otherwise falls back to base_consumption scaled by this size's own
+	Consumption Factor (Style Size.consumption_factor, base size = 1.00) -
+	the same grading number the workspace already uses to preview per-size
+	consumption, now driving actual generation too instead of only display."""
+	size_row = next(
+		(s for s in style_doc.sizes if (s.size_code or s.size) == size_code), None
+	)
+	consumption_factor = flt(size_row.get("consumption_factor")) if size_row and size_row.get("consumption_factor") not in (None, "") else 1
+	consumption_factor = consumption_factor or 1
+
+	rows = []
+	for line in sb.lines:
+		explicit = _resolve(sb.overrides, line.line_id, colour_code, size_code, "consumption")
+		if explicit is not None:
+			qty = explicit
+		elif line.varies_by_size:
+			qty = (line.base_consumption or 0) * consumption_factor
+		else:
+			qty = line.base_consumption
+
+		rows.append({
+			"item_code": resolve_item(sb, line, colour_code, size_code, cw.get("colour_attribute_value")),
+			"qty": (qty or 0) * (1 + (line.wastage_pct or 0) / 100.0),
+			"uom": line.uom,
+		})
+
+	operations = [
+		{
+			"operation": op.operation,
+			"workstation": op.workstation,
+			"time_in_mins": op.time_in_mins,
+		}
+		for op in sb.operations
+	]
+
+	bom = frappe.new_doc("BOM")
+	bom.item = sku_item
+	bom.quantity = 1
+	bom.is_active = 1
+	bom.is_default = 1
+	bom.with_operations = 1 if operations else 0
+	for r in rows:
+		bom.append("items", r)
+	for op in operations:
+		bom.append("operations", op)
+	bom.custom_style = style_doc.name
+	bom.custom_style_bom = sb.name
+	bom.custom_style_bom_version = sb.version
+	bom.custom_colourway = colour_code
+	bom.custom_size = size_code
 	bom.insert(ignore_permissions=True)
 	bom.submit()
 	return bom.name

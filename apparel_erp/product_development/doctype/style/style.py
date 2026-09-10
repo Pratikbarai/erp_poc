@@ -126,9 +126,10 @@ def get_latest_style_bom(style):
 @frappe.whitelist()
 def sync_matrix_for_colour_bom(style, colour_code, bom_name):
 	"""Called by the Style BOM generator right after it builds (or reuses)
-	one BOM for a colourway. Every size in that colour still needs its own
-	sellable Item/SKU - ERPNext needs a concrete unit per order line - only
-	the BOM itself is shared across every size of the colour."""
+	one BOM for a colourway (Per Colourway generation mode). Every size in
+	that colour still needs its own sellable Item/SKU - ERPNext needs a
+	concrete unit per order line - only the BOM itself is shared across
+	every size of the colour."""
 	style_doc = frappe.get_doc("Style", style)
 	colour_rows = [r for r in style_doc.matrix_items if r.colour_code == colour_code]
 	if not colour_rows:
@@ -156,6 +157,67 @@ def sync_matrix_for_colour_bom(style, colour_code, bom_name):
 	style_doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"sku_count": len(colour_rows)}
+
+
+def _matrix_row(style_doc, colour_code, size_code):
+	return next(
+		(r for r in style_doc.matrix_items if r.colour_code == colour_code and r.size_code == size_code),
+		None,
+	)
+
+
+@frappe.whitelist()
+def ensure_matrix_sku_item(style, colour_code, size_code):
+	"""Get-or-create the sellable SKU Item for exactly one colour x size
+	matrix cell, without needing a BOM to exist yet. Per-SKU generation mode
+	needs a real Item to attach each SKU-level BOM to *before* that BOM can
+	be inserted, unlike sync_matrix_for_colour_bom which only ever runs
+	after its (shared) BOM already exists."""
+	style_doc = frappe.get_doc("Style", style)
+	row = _matrix_row(style_doc, colour_code, size_code)
+	if not row:
+		frappe.throw(_("No matrix row for colour {0} / size {1} on {2}.").format(colour_code, size_code, style))
+
+	if row.item and frappe.db.exists("Item", row.item):
+		return row.item
+
+	colour_meta = next(
+		(c for c in style_doc.colours if c.colour_code == colour_code or c.colour_name == colour_code), None
+	)
+	sku = row.sku or f"{style_doc.style_no}-{colour_code}-{row.size_code}"
+	item = _get_or_create_style_item(
+		style_doc,
+		item_code=sku,
+		item_name=f"{style_doc.style_name} - {colour_meta.colour_name if colour_meta else colour_code} - {row.size_code}",
+	)
+	row.sku = sku
+	row.item = item.name
+	row.item_name = item.item_name
+	row.item_code = item.item_code
+	style_doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return item.name
+
+
+@frappe.whitelist()
+def sync_matrix_for_sku_bom(style, colour_code, size_code, bom_name):
+	"""Per-SKU counterpart to sync_matrix_for_colour_bom. The Item for this
+	cell is expected to already exist (see ensure_matrix_sku_item) - this
+	just stamps the newly generated per-SKU BOM onto that ONE row and marks
+	it Active, instead of stamping one shared BOM across every size of the
+	colour like the Per Colourway mode does."""
+	style_doc = frappe.get_doc("Style", style)
+	row = _matrix_row(style_doc, colour_code, size_code)
+	if not row:
+		return {"sku_count": 0}
+
+	row.bom = bom_name
+	row.status = "Active"
+	row.production_for_sku = row.get("production_for_sku") or 1
+
+	style_doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"sku_count": 1}
 
 
 @frappe.whitelist()

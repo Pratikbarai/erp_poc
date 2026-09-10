@@ -51,5 +51,18 @@
   "print_hide": 1,
   "no_copy": 1,
   "description": "Generated BOMs are read-only forever - see Style BOM section 7.1. Amend the Style BOM and regenerate instead of editing this document."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "BOM-custom_size",
+  "dt": "BOM",
+  "fieldname": "custom_size",
+  "label": "Size",
+  "fieldtype": "Data",
+  "insert_after": "custom_colourway",
+  "read_only": 1,
+  "print_hide": 1,
+  "no_copy": 1,
+  "description": "Only set for a Per-SKU generated BOM (one BOM per colour x size). Blank for a Per-Colourway generated BOM, which is shared across every size of that colour."
  }
 ]
