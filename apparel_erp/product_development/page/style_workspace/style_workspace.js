@@ -1648,6 +1648,7 @@ $panels.html(`
 			Done: ["pill-ok", "Done"],
 			Late: ["pill-bad", "Late"],
 			"At Risk": ["pill-warn", "At risk"],
+			"In Progress": ["pill-info", "In progress"],
 			Open: ["pill-mut", "Open"]
 		};
 
@@ -1730,9 +1731,11 @@ $panels.html(`
 					this.workspace_tna = r.message;
 					this.tna_count = (this.workspace_tna.activities || []).length;
 					const marked = (r.message && r.message.newly_marked) || [];
-					sw_toast(this.wrapper, marked.length
-						? `Marked done from the workspace: ${marked.join(", ")}.`
-						: "No new completions to fetch - already up to date.");
+					const inProgress = (r.message && r.message.newly_in_progress) || [];
+					const parts = [];
+					if (marked.length) parts.push(`Done: ${marked.join(", ")}`);
+					if (inProgress.length) parts.push(`In progress: ${inProgress.join(", ")}`);
+					sw_toast(this.wrapper, parts.length ? parts.join(" · ") : "No changes to fetch - already up to date.");
 					this.paint_tna_tab($panels);
 				},
 				error: () => frappe.dom.unfreeze()

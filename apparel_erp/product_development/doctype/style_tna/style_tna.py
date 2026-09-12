@@ -15,6 +15,18 @@ class StyleTNA(Document):
 			self._recompute_row(row)
 
 	def _recompute_row(self, row):
+		# actual_date wins regardless of plan_date - auto-fetched milestones
+		# (Design & Tech Pack / Costing / Sampling) are deliberately created
+		# with no plan_date at all, since they're tracked by real workspace
+		# status rather than planned dates. Checking plan_date first meant
+		# those rows could never reach "Done" even once actual_date was set -
+		# sync_tna_activities_from_style would report a milestone as newly
+		# marked, but the row stayed showing "Open" forever.
+		if row.actual_date:
+			row.status = "Done"
+			row.variance_days = date_diff(getdate(row.actual_date), getdate(row.plan_date)) if row.plan_date else 0
+			return
+
 		if not row.plan_date:
 			row.status = row.status or "Open"
 			row.variance_days = 0
@@ -22,12 +34,6 @@ class StyleTNA(Document):
 
 		plan = getdate(row.plan_date)
 		revised = getdate(row.revised_date) if row.revised_date else plan
-
-		if row.actual_date:
-			actual = getdate(row.actual_date)
-			row.status = "Done"
-			row.variance_days = date_diff(actual, plan)
-			return
 
 		row.variance_days = date_diff(revised, plan)
 		if getdate(today()) > revised:
@@ -164,33 +170,55 @@ AUTO_TNA_MILESTONES = [
 ]
 
 
-def _auto_milestone_done(style, key):
-	"""Whether this milestone's underlying condition is true RIGHT NOW.
-	Only ever used to mark a milestone done, never to un-mark one that
-	already is - see sync_tna_activities_from_style."""
+def _auto_milestone_state(style, key):
+	"""Where this milestone's underlying condition actually stands RIGHT
+	NOW - "Not Started", "In Progress" or "Done" - read from the real
+	doctype driving that stage, not re-typed by the merchandiser."""
 	if key == "auto:design_tech_pack":
-		return frappe.db.get_value("Design Tech Pack", {"style": style}, "status") == "Completed"
+		status = frappe.db.get_value("Design Tech Pack", {"style": style}, "status")
+		if status == "Completed":
+			return "Done"
+		if status == "In Progress":
+			return "In Progress"
+		return "Not Started"
+
 	if key == "auto:costing":
-		return bool(frappe.db.exists("Style Cost Sheet", {"style": style, "docstatus": 1}))
+		if frappe.db.exists("Style Cost Sheet", {"style": style, "docstatus": 1}):
+			return "Done"
+		if frappe.db.exists("Style Cost Sheet", {"style": style, "docstatus": 0}):
+			return "In Progress"
+		return "Not Started"
+
 	if key == "auto:sampling":
 		style_doc = frappe.get_doc("Style", style)
 		matrix_items = [m for m in (style_doc.get("matrix_items") or []) if (m.status or "Active") == "Active"]
-		return bool(matrix_items) and all(m.item for m in matrix_items)
-	return False
+		if not matrix_items:
+			return "Not Started"
+		generated = [m for m in matrix_items if m.item]
+		if len(generated) == len(matrix_items):
+			return "Done"
+		if generated:
+			return "In Progress"
+		return "Not Started"
+
+	return "Not Started"
 
 
 @frappe.whitelist()
 def sync_tna_activities_from_style(style):
 	"""Creates any AUTO_TNA_MILESTONES row that doesn't exist yet on this
 	Style TNA (as an open milestone with no plan/actual date - planning
-	dates stay the merchandiser's to set), and stamps actual_date = today()
-	on any whose underlying condition is met for the first time.
+	dates stay the merchandiser's to set), stamps actual_date = today() on
+	any that have reached "Done" for the first time, and otherwise keeps
+	the row's status in sync with "Not Started" / "In Progress" so the
+	table reflects work that's underway, not just work that's finished.
 
-	Deliberately never un-marks a milestone that was already completed
-	(e.g. if a costing later gets cancelled) - once-done T&A history isn't
-	erased by a later regression - and never touches manually-added
-	activities, since those don't carry one of the AUTO_TNA_MILESTONES
-	source_reference keys."""
+	Once a milestone is Done it's permanent - actual_date is never cleared
+	and status is never moved back to Open/In Progress, even if the
+	underlying record later regresses (e.g. a costing gets cancelled).
+	Manually-added activities are untouched either way, since those don't
+	carry one of the AUTO_TNA_MILESTONES source_reference keys - the
+	merchandiser is always free to add their own on top of these."""
 	name = frappe.db.get_value("Style TNA", {"style": style}, "name")
 	if not name:
 		frappe.throw(_("No Time & Action schedule for {0} yet. Set one up first.").format(style))
@@ -202,6 +230,7 @@ def sync_tna_activities_from_style(style):
 	existing_by_key = {row.source_reference: row for row in doc.activities if row.source_reference in auto_keys}
 
 	newly_marked = []
+	newly_in_progress = []
 	for milestone in AUTO_TNA_MILESTONES:
 		row = existing_by_key.get(milestone["key"])
 		if not row:
@@ -213,14 +242,24 @@ def sync_tna_activities_from_style(style):
 			})
 		if row.actual_date:
 			continue
-		if _auto_milestone_done(style, milestone["key"]):
+
+		state = _auto_milestone_state(style, milestone["key"])
+		if state == "Done":
 			row.actual_date = today()
+			row.status = "Done"
 			newly_marked.append(milestone["activity"])
+		elif state == "In Progress":
+			if row.status != "In Progress":
+				newly_in_progress.append(milestone["activity"])
+			row.status = "In Progress"
+		else:
+			row.status = row.status or "Open"
 
 	doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	result = _serialize(doc)
 	result["newly_marked"] = newly_marked
+	result["newly_in_progress"] = newly_in_progress
 	return result
 
 
