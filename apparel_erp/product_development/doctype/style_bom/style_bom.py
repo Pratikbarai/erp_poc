@@ -324,8 +324,6 @@ def generate_production_boms(style_bom_name):
 
 	if sb.docstatus != 1:
 		frappe.throw(_("Style BOM must be submitted before generating."))
-	if sb.bom_type != "Bulk":
-		frappe.throw(_("Only a Bulk Style BOM can generate production BOMs."))
 
 	mode = sb.get("bom_generation_mode")
 	if mode not in ("Per Colourway (Material-wise)", "Per SKU (Colour x Size)"):
@@ -371,6 +369,25 @@ def generate_production_boms(style_bom_name):
 
 	frappe.db.commit()
 	return {"generated": generated, "count": len(generated)}
+
+
+@frappe.whitelist()
+def set_bom_generation_mode(style_bom_name, mode):
+	"""Lets the workspace set this directly - including on an already
+	submitted Style BOM, which is exactly the case that used to leave
+	generation permanently stuck (bom_generation_mode had no
+	allow_on_submit, so a BOM submitted before choosing a mode could never
+	have one set again short of a full amend)."""
+	if mode not in ("Per Colourway (Material-wise)", "Per SKU (Colour x Size)"):
+		frappe.throw(_("Unknown BOM Generation Mode: {0}").format(mode))
+	if not frappe.has_permission("Style BOM", "write"):
+		frappe.throw(_("Not permitted to edit Style BOM"))
+
+	sb = frappe.get_doc("Style BOM", style_bom_name)
+	sb.bom_generation_mode = mode
+	sb.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": sb.name, "bom_generation_mode": sb.bom_generation_mode}
 
 
 def _generate_or_branch(style_doc, sb, colour_code, size_code, build_fn):
@@ -640,6 +657,7 @@ def serialize_style_bom(sb, style_doc, inherited_from=None):
 		"version": sb.version or 0,
 		"bom_type": sb.bom_type,
 		"docstatus": sb.docstatus,
+		"bom_generation_mode": sb.get("bom_generation_mode") or None,
 		"inherited_from": inherited_from,
 		"editable": editable,
 		"line_count": len(lines),

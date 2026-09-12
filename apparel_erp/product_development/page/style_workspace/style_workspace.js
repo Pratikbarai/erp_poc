@@ -713,21 +713,15 @@ class StyleWorkspace {
 				return;
 			}
 
-			if (info.bom_type !== "Bulk") {
-				frappe.confirm(
-					`The current Style BOM (<b>${frappe.utils.escape_html(info.name)}</b>) is submitted as <b>${frappe.utils.escape_html(info.bom_type || "Development")}</b> - only a <b>Bulk</b> Style BOM can generate production BOMs and SKUs. Amend it and switch the type now?`,
-					() => frappe.set_route("Form", "Style BOM", info.name)
-				);
+			if (!info.bom_generation_mode) {
+				this.prompt_bom_generation_mode(info.name, () => this.generate_all_skus());
 				return;
 			}
 
-			// Submitted + Bulk: the real thing can actually run, right here -
-			// no need to send the user to the Style BOM form at all. The
-			// form itself will throw a clear error if bom_generation_mode
-			// (Per Colourway / Per SKU) hasn't been chosen yet - no need to
-			// duplicate that check here.
+			// Submitted + mode chosen: the real thing can actually run, right
+			// here - no need to send the user to the Style BOM form at all.
 			frappe.confirm(
-				`Generate production BOMs and SKUs for every Active, Approved-for-Production colourway on ${frappe.utils.escape_html(this.style.style_no || this.style.name)}? Gates (Style Confirmed, PP approval, Lab Dip approvals) will be checked first.`,
+				`Generate production BOMs and SKUs for every Active, Approved-for-Production colourway on ${frappe.utils.escape_html(this.style.style_no || this.style.name)} (mode: <b>${frappe.utils.escape_html(info.bom_generation_mode)}</b>)? Gates (Style Confirmed, PP approval, Lab Dip approvals) will be checked first.`,
 				() => {
 					frappe.dom.freeze("Checking gates and generating…");
 					frappe.call({
@@ -745,6 +739,35 @@ class StyleWorkspace {
 				}
 			);
 		});
+	}
+
+	prompt_bom_generation_mode(style_bom_name, onDone) {
+		const d = new frappe.ui.Dialog({
+			title: "Choose BOM Generation Mode",
+			fields: [{
+				fieldname: "mode",
+				label: "BOM Generation Mode",
+				fieldtype: "Select",
+				options: "Per Colourway (Material-wise)\nPer SKU (Colour x Size)",
+				reqd: 1,
+				description: "Per Colourway: one shared BOM per colour, size-weighted average consumption. Per SKU: one exact BOM per colour x size, using that size's own consumption - plugs directly into the real sellable Item."
+			}],
+			primary_action_label: "Save & continue",
+			primary_action: (values) => {
+				frappe.dom.freeze("Saving…");
+				frappe.call({
+					method: "apparel_erp.product_development.doctype.style_bom.style_bom.set_bom_generation_mode",
+					args: { style_bom_name, mode: values.mode },
+					callback: () => {
+						frappe.dom.unfreeze();
+						d.hide();
+						if (onDone) onDone();
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			}
+		});
+		d.show();
 	}
 
 	// ---------- Order (Buyer PO + Order Matrix) ----------

@@ -2,16 +2,10 @@ frappe.ui.form.on("Style BOM", {
 	refresh(frm) {
 		render_generation_log(frm);
 
-		if (frm.doc.docstatus === 1 && frm.doc.bom_type === "Bulk") {
+		if (frm.doc.docstatus === 1) {
 			frm.add_custom_button(__("Generate Production BOMs"), () => {
 				generate_production_boms(frm);
 			}).addClass("btn-primary");
-		}
-
-		if (frm.doc.docstatus === 1 && frm.doc.bom_type === "Development") {
-			frm.dashboard.set_headline_alert(
-				`<div class="alert alert-warning">${__("This Style BOM is Development type - only a Bulk Style BOM can generate production BOMs. Amend and switch the type when the design is locked.")}</div>`
-			);
 		}
 
 		if (frm.doc.docstatus === 0) {
