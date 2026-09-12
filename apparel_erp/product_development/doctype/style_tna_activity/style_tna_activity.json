@@ -15,7 +15,8 @@
   {"fieldname": "is_milestone", "fieldtype": "Check", "label": "Milestone"},
   {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Open\nIn Progress\nAt Risk\nLate\nDone", "default": "Open", "read_only": 1, "in_list_view": 1, "description": "Derived automatically: Done once Actual is set; Late if past Revised with no Actual; At Risk if Revised has slipped past Plan but isn't due yet; In Progress for auto-tracked milestones with no plan date whose underlying work has started; otherwise Open."},
   {"fieldname": "variance_days", "fieldtype": "Int", "label": "Variance (days)", "read_only": 1, "in_list_view": 1},
-  {"fieldname": "source_reference", "fieldtype": "Data", "label": "Source Reference", "description": "Optional link back to the record driving this activity, e.g. a Purchase Receipt or Quality Inspection name."}
+  {"fieldname": "source_reference", "fieldtype": "Data", "label": "Source Reference", "read_only": 1, "description": "For auto-tracked milestones: the actual record and version/revision behind this row (e.g. \"COST-STY-001 (Rev 2, Approved)\"), fetched live - not a free-text note. For manually-added activities, an optional link back to whatever record drives it."},
+  {"fieldname": "auto_key", "fieldtype": "Data", "label": "Auto Key", "hidden": 1, "read_only": 1, "no_copy": 1, "description": "Internal - identifies which AUTO_TNA_MILESTONES definition this row was generated from, so re-syncing updates the same row instead of duplicating it. Empty for manually-added activities."}
  ],
  "permissions": []
 }

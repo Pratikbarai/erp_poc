@@ -170,38 +170,84 @@ AUTO_TNA_MILESTONES = [
 ]
 
 
-def _auto_milestone_state(style, key):
+# "Fetch activities" (spec: auto-populate/tick off milestones like Design &
+# Tech Pack / Costing / Sampling from the style's own real progress
+# elsewhere in the workspace, instead of the merchandiser re-typing what
+# already happened). Each key is a stable machine reference stored in
+# Style TNA Activity.auto_key so a re-sync finds the same row again even
+# after the merchandiser has edited its label/owner/dates, or after
+# source_reference has been overwritten with a human-readable detail.
+AUTO_TNA_MILESTONES = [
+	{"key": "auto:design_tech_pack", "activity": "Design & Tech Pack completed", "activity_group": "Product Development"},
+	{"key": "auto:costing", "activity": "Costing submitted", "activity_group": "Product Development"},
+	{"key": "auto:sampling", "activity": "Sampling SKUs generated", "activity_group": "Product Development"},
+]
+
+
+def _auto_milestone_info(style, key):
 	"""Where this milestone's underlying condition actually stands RIGHT
-	NOW - "Not Started", "In Progress" or "Done" - read from the real
-	doctype driving that stage, not re-typed by the merchandiser."""
+	NOW - state ("Not Started" / "In Progress" / "Done"), plus who last
+	touched it and which version/revision of the real record backs that
+	state. Every stage already carries its own versioning (Tech Pack
+	version, Costing revision, Style BOM version) - this is what surfaces
+	that on the T&A row instead of just a bare date with nothing behind
+	it, so "Done" is something the user can actually go look at."""
 	if key == "auto:design_tech_pack":
-		status = frappe.db.get_value("Design Tech Pack", {"style": style}, "status")
-		if status == "Completed":
-			return "Done"
-		if status == "In Progress":
-			return "In Progress"
-		return "Not Started"
+		row = frappe.db.get_value(
+			"Design Tech Pack", {"style": style},
+			["name", "status", "tech_pack_version", "modified_by"], as_dict=True
+		)
+		if not row:
+			return {"state": "Not Started"}
+		state = "Done" if row.status == "Completed" else ("In Progress" if row.status == "In Progress" else "Not Started")
+		if state == "Not Started":
+			return {"state": "Not Started"}
+		return {
+			"state": state,
+			"responsible": row.modified_by,
+			"reference": f"{row.name} (v{row.tech_pack_version or 1})",
+		}
 
 	if key == "auto:costing":
-		if frappe.db.exists("Style Cost Sheet", {"style": style, "docstatus": 1}):
-			return "Done"
-		if frappe.db.exists("Style Cost Sheet", {"style": style, "docstatus": 0}):
-			return "In Progress"
-		return "Not Started"
+		submitted = frappe.db.get_value(
+			"Style Cost Sheet", {"style": style, "docstatus": 1},
+			["name", "revision", "workflow_state", "modified_by"], as_dict=True, order_by="revision desc"
+		)
+		if submitted:
+			return {
+				"state": "Done",
+				"responsible": submitted.modified_by,
+				"reference": f"{submitted.name} (Rev {submitted.revision or 1}, {submitted.workflow_state})",
+			}
+		draft = frappe.db.get_value(
+			"Style Cost Sheet", {"style": style, "docstatus": 0},
+			["name", "modified_by"], as_dict=True
+		)
+		if draft:
+			return {"state": "In Progress", "responsible": draft.modified_by, "reference": f"{draft.name} (Draft)"}
+		return {"state": "Not Started"}
 
 	if key == "auto:sampling":
 		style_doc = frappe.get_doc("Style", style)
 		matrix_items = [m for m in (style_doc.get("matrix_items") or []) if (m.status or "Active") == "Active"]
 		if not matrix_items:
-			return "Not Started"
+			return {"state": "Not Started"}
 		generated = [m for m in matrix_items if m.item]
-		if len(generated) == len(matrix_items):
-			return "Done"
-		if generated:
-			return "In Progress"
-		return "Not Started"
+		if not generated:
+			return {"state": "Not Started"}
 
-	return "Not Started"
+		bom = frappe.db.get_value(
+			"Style BOM", {"style": style, "docstatus": 1, "bom_type": "Bulk"},
+			["name", "version", "modified_by"], as_dict=True, order_by="version desc"
+		)
+		reference = f"{len(generated)}/{len(matrix_items)} SKUs"
+		if bom:
+			reference = f"{bom.name} (v{bom.version or 1}) \u00b7 {reference}"
+		info = {"reference": reference, "responsible": bom.modified_by if bom else None}
+		info["state"] = "Done" if len(generated) == len(matrix_items) else "In Progress"
+		return info
+
+	return {"state": "Not Started"}
 
 
 @frappe.whitelist()
@@ -210,15 +256,22 @@ def sync_tna_activities_from_style(style):
 	Style TNA (as an open milestone with no plan/actual date - planning
 	dates stay the merchandiser's to set), stamps actual_date = today() on
 	any that have reached "Done" for the first time, and otherwise keeps
-	the row's status in sync with "Not Started" / "In Progress" so the
-	table reflects work that's underway, not just work that's finished.
+	the row's status, owner and source reference in sync with the real
+	record driving it - not just a date with nothing behind it.
 
 	Once a milestone is Done it's permanent - actual_date is never cleared
 	and status is never moved back to Open/In Progress, even if the
-	underlying record later regresses (e.g. a costing gets cancelled).
-	Manually-added activities are untouched either way, since those don't
-	carry one of the AUTO_TNA_MILESTONES source_reference keys - the
-	merchandiser is always free to add their own on top of these."""
+	underlying record later regresses (e.g. a costing gets cancelled) -
+	but the owner/reference are still refreshed on Done rows so they keep
+	pointing at the latest version if it changes after the fact (e.g. a
+	costing amendment producing a new revision after the original was
+	approved). Manually-added activities are untouched either way, since
+	those never carry an auto_key - the merchandiser is always free to add
+	their own on top of these.
+
+	Pre-existing rows from before auto_key existed matched on
+	source_reference instead; those are migrated in place here rather than
+	duplicated."""
 	name = frappe.db.get_value("Style TNA", {"style": style}, "name")
 	if not name:
 		frappe.throw(_("No Time & Action schedule for {0} yet. Set one up first.").format(style))
@@ -227,7 +280,13 @@ def sync_tna_activities_from_style(style):
 
 	doc = frappe.get_doc("Style TNA", name)
 	auto_keys = {m["key"] for m in AUTO_TNA_MILESTONES}
-	existing_by_key = {row.source_reference: row for row in doc.activities if row.source_reference in auto_keys}
+	existing_by_key = {}
+	for row in doc.activities:
+		key = row.auto_key or (row.source_reference if row.source_reference in auto_keys else None)
+		if key in auto_keys:
+			existing_by_key[key] = row
+			if not row.auto_key:
+				row.auto_key = key  # migrate a pre-auto_key row in place
 
 	newly_marked = []
 	newly_in_progress = []
@@ -238,12 +297,26 @@ def sync_tna_activities_from_style(style):
 				"activity_group": milestone["activity_group"],
 				"activity": milestone["activity"],
 				"is_milestone": 1,
-				"source_reference": milestone["key"],
+				"auto_key": milestone["key"],
 			})
+
+		info = _auto_milestone_info(style, milestone["key"])
+		state = info.get("state", "Not Started")
+
 		if row.actual_date:
+			# Already Done and permanent - still refresh owner/reference in
+			# case a later revision superseded the one that completed it.
+			if info.get("responsible"):
+				row.responsible = info["responsible"]
+			if info.get("reference"):
+				row.source_reference = info["reference"]
 			continue
 
-		state = _auto_milestone_state(style, milestone["key"])
+		if info.get("responsible"):
+			row.responsible = info["responsible"]
+		if info.get("reference"):
+			row.source_reference = info["reference"]
+
 		if state == "Done":
 			row.actual_date = today()
 			row.status = "Done"
