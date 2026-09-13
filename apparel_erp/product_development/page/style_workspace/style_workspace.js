@@ -2807,7 +2807,7 @@ const SW_CSS = `
 .sw-samp-closure{font-size:12px;color:var(--sw-ink-2);min-width:74px;text-align:right}
 .sw-samp-versions{border-top:1px solid var(--sw-line);padding:6px 10px}
 .sw-samp-version{display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:12.5px;cursor:pointer;border-radius:4px}
-.sw-samp-version:hover{background:var(--sw-bg-2)}
+.sw-samp-version:hover{background:var(--sw-bg-2,#F8FAFC)}
 .sw-samp-version.sel{background:var(--sw-accent-10,#EEF4FF)}
 .sw-samp-vno{font-weight:600;width:26px}
 .sw-samp-desc{flex:1;color:var(--sw-ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
