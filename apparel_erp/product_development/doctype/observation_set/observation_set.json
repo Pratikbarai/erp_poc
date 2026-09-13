@@ -1,0 +1,30 @@
+{
+  "doctype": "DocType",
+  "name": "Observation Set",
+  "module": "Product Development",
+  "naming_rule": "By fieldname",
+  "autoname": "field:set_name",
+  "engine": "InnoDB",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "set_name",
+      "fieldtype": "Data",
+      "label": "Set Name",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "description": "e.g. 'Fit checklist'. Free-typed observations at version level produce no analytics - seed this with real reject-note text from the customer so recurring corrections roll up into a report instead of scattering as free text."
+    },
+    {
+      "fieldname": "items",
+      "fieldtype": "Table",
+      "options": "Observation Item",
+      "label": "Observations"
+    }
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "All", "read": 1}
+  ]
+}

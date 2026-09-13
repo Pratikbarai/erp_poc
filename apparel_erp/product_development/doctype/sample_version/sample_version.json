@@ -1,0 +1,50 @@
+{
+  "doctype": "DocType",
+  "name": "Sample Version",
+  "module": "Product Development",
+  "naming_rule": "Expression",
+  "autoname": "format:SMV-{#####}",
+  "engine": "InnoDB",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "sample_stage",
+      "fieldtype": "Link",
+      "options": "Sample Stage",
+      "label": "Sample Stage",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {"fieldname": "version_no", "fieldtype": "Int", "label": "Version No.", "read_only": 1, "in_list_view": 1, "description": "Auto-increment within the stage. Never reused, even after cancellation."},
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "options": "In Progress\nSubmitted\nApproved\nRevised\nCancelled",
+      "default": "In Progress",
+      "label": "Status",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {"fieldname": "cb1", "fieldtype": "Column Break"},
+    {"fieldname": "description", "fieldtype": "Small Text", "label": "Description", "description": "One line shown in the stage list."},
+    {"fieldname": "sb_dates", "fieldtype": "Section Break", "label": "Dates"},
+    {"fieldname": "sent_on", "fieldtype": "Date", "label": "Sent On"},
+    {"fieldname": "received_on", "fieldtype": "Date", "label": "Received On"},
+    {"fieldname": "cb2", "fieldtype": "Column Break"},
+    {"fieldname": "decided_on", "fieldtype": "Date", "label": "Decided On", "read_only": 1},
+    {"fieldname": "decided_by", "fieldtype": "Link", "options": "User", "label": "Decided By", "read_only": 1},
+    {"fieldname": "sb_cost", "fieldtype": "Section Break", "label": "Cost"},
+    {"fieldname": "sample_cost", "fieldtype": "Currency", "label": "Sample Cost", "description": "Manual, or seeded from the style BOM at this stage's colourway. Sample-room costs rarely match BOM exactly, so manual entry always stays possible - full costing lives in the Costing tab, not here."},
+    {"fieldname": "is_recoverable", "fieldtype": "Check", "label": "Recoverable", "description": "Chargeable to the customer."},
+    {"fieldname": "cb3", "fieldtype": "Column Break"},
+    {"fieldname": "predecessor", "fieldtype": "Link", "options": "Sample Version", "label": "Predecessor", "read_only": 1, "description": "Set when this version was created via Create Next Version."},
+    {"fieldname": "sb_override", "fieldtype": "Section Break", "label": "Dependency Override"},
+    {"fieldname": "dependency_override", "fieldtype": "Check", "label": "Advisory Dependency Overridden", "read_only": 1},
+    {"fieldname": "dependency_override_reason", "fieldtype": "Small Text", "label": "Override Reason", "read_only": 1, "description": "Mandatory whenever an unsatisfied Advisory dependency was ignored to create this version."}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "All", "read": 1, "write": 1, "create": 1}
+  ]
+}

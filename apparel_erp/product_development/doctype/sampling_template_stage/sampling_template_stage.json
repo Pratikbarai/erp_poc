@@ -1,0 +1,67 @@
+{
+  "doctype": "DocType",
+  "name": "Sampling Template Stage",
+  "module": "Product Development",
+  "istable": 1,
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "fields": [
+    {
+      "fieldname": "stage_name",
+      "fieldtype": "Data",
+      "label": "Stage",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "e.g. Proto, Fit, Lab Dip, Size Set, PP Sealer, TOP. Must be unique within this template - depends_on references other rows by this exact text."
+    },
+    {
+      "fieldname": "depends_on",
+      "fieldtype": "Small Text",
+      "label": "Depends On",
+      "description": "JSON list of stage_name values within this same template, e.g. [\"Fit\"]. Empty means this stage may start immediately - parallelism is the default, no flag needed."
+    },
+    {
+      "fieldname": "dependency_type",
+      "fieldtype": "Select",
+      "options": "Blocking\nAdvisory",
+      "default": "Blocking",
+      "label": "Dependency Type",
+      "in_list_view": 1,
+      "description": "Blocking: version creation is refused while any dependency is unsatisfied. Advisory: allowed, but flagged with a warning and logged on the version."
+    },
+    {
+      "fieldname": "owner_role",
+      "fieldtype": "Link",
+      "options": "Role",
+      "label": "Owner Role",
+      "description": "Default owner resolution when a plan is created from this template."
+    },
+    {
+      "fieldname": "default_tat_days",
+      "fieldtype": "Int",
+      "label": "Default TAT (days)",
+      "description": "Used to seed planned_date on the Sample Stage created from this row."
+    },
+    {
+      "fieldname": "observation_set",
+      "fieldtype": "Link",
+      "options": "Observation Set",
+      "label": "Observation Set"
+    },
+    {
+      "fieldname": "is_mandatory",
+      "fieldtype": "Check",
+      "label": "Mandatory",
+      "description": "Blocks the style from being marked production-ready if this stage is not Closed - Approved."
+    },
+    {
+      "fieldname": "parent_object",
+      "fieldtype": "Select",
+      "options": "Style\nMaterial",
+      "default": "Style",
+      "label": "Applies To",
+      "description": "PoC keeps this as a style-level stage even for Material-type rows (lab dips etc) - see the module's material-sample exception note. Reserved for the future shared-record model."
+    }
+  ],
+  "permissions": []
+}

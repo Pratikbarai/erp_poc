@@ -230,6 +230,7 @@ class StyleWorkspace {
 					<button data-t="bom" class="${this.active_tab === "bom" ? "on" : ""}">Style BOM</button>
 					<button data-t="techpack" class="${this.active_tab === "techpack" ? "on" : ""}">Tech pack</button>
 					<button data-t="costing" class="${this.active_tab === "costing" ? "on" : ""}">Costing</button>
+					<button data-t="sampling" class="${this.active_tab === "sampling" ? "on" : ""}">Sampling${this.sampling_count ? `<span class="sw-count">${this.sampling_count}</span>` : ""}</button>
 					<button data-t="tna" class="${this.active_tab === "tna" ? "on" : ""}">Time &amp; action${this.tna_count ? `<span class="sw-count">${this.tna_count}</span>` : ""}</button>
 					<button data-t="jobwork" class="${this.active_tab === "jobwork" ? "on" : ""}">Job work</button>
 				</div>
@@ -258,6 +259,7 @@ class StyleWorkspace {
 		else if (this.active_tab === "bom") { this.render_bom_tab($panels); }
 		else if (this.active_tab === "techpack") this.render_techpack_tab($panels);
 		else if (this.active_tab === "costing") { this.render_costing_tab($panels); }
+		else if (this.active_tab === "sampling") { this.render_sampling_tab($panels); }
 		else if (this.active_tab === "tna") { this.render_tna_tab($panels); }
 		else if (this.active_tab === "jobwork") $panels.html(this.tpl_preview_tab(
 			"Job work isn't wired to a doctype yet.",
@@ -1635,6 +1637,316 @@ $panels.html(`
 		});
 	}
 
+	// ---------- Sampling ----------
+	render_sampling_tab($panels) {
+		$panels.html(`<div class="sw-loading">Loading sampling…</div>`);
+		frappe.call({
+			method: "apparel_erp.product_development.sampling.get_workspace_sampling",
+			args: { style: this.style.name }
+		}).then((r) => {
+			this.workspace_sampling = r.message || null;
+			this.sampling_count = this.workspace_sampling ? (this.workspace_sampling.stages || []).length : 0;
+			$(this.wrapper).find(`#swTabs button[data-t="sampling"] .sw-count`).remove();
+			if (this.sampling_count) {
+				$(this.wrapper).find(`#swTabs button[data-t="sampling"]`).append(`<span class="sw-count">${this.sampling_count}</span>`);
+			}
+			if (this.workspace_sampling && !this.sampling_selected_stage && this.workspace_sampling.stages.length) {
+				this.sampling_selected_stage = this.workspace_sampling.stages[0].name;
+			}
+			this.paint_sampling_tab($panels);
+		});
+	}
+
+	paint_sampling_tab($panels) {
+		const s = this.workspace_sampling;
+		if (!s) {
+			$panels.html(`
+				<div class="sw-card">
+					<div class="sw-card-b">
+						<div class="sw-empty">No Sample Plan yet for this style.</div>
+						<button class="sw-btn sw-btn-pri sw-btn-sm" id="swCreateSamplePlan" style="margin-top:10px">Set up sample plan</button>
+					</div>
+				</div>
+			`);
+			$panels.find("#swCreateSamplePlan").on("click", () => this.prompt_create_sample_plan($panels));
+			return;
+		}
+
+		const stageDot = { "Blocked": "pill-mut", "Not Started": "pill-mut", "In Progress": "pill-warn", "Closed - Approved": "pill-ok", "Closed - Dropped": "pill-bad" };
+		const versionDot = { "In Progress": "pill-warn", "Submitted": "pill-warn", "Approved": "pill-ok", "Revised": "pill-bad", "Cancelled": "pill-bad" };
+
+		const stageRows = (s.stages || []).map((stage) => {
+			const expanded = stage.name === this.sampling_selected_stage;
+			const deps = (() => { try { return JSON.parse(stage.depends_on || "[]"); } catch (e) { return []; } })();
+			const depBadge = !deps.length ? "parallel" : `after ${deps.join(", ")}`;
+			const versionRows = (stage.versions || []).length
+				? stage.versions.map((v) => `
+					<div class="sw-samp-version ${v.name === this.sampling_selected_version ? "sel" : ""}" data-version="${v.name}" data-stage="${stage.name}">
+						<span class="sw-dot ${versionDot[v.status] || "pill-mut"}"></span>
+						<span class="sw-samp-vno">v${v.version_no}</span>
+						<span class="sw-samp-desc">${frappe.utils.escape_html(v.description || "")}</span>
+						<span class="sw-samp-obscount">${(v.observations || []).length} obs</span>
+						<span class="sw-samp-vstatus">${v.status}</span>
+					</div>`).join("")
+				: `<div class="sw-empty" style="padding:6px 0">No versions yet.</div>`;
+			return `
+				<div class="sw-samp-stage">
+					<div class="sw-samp-stage-head" data-stage-toggle="${stage.name}">
+						<span class="sw-dot ${stageDot[stage.status] || "pill-mut"}"></span>
+						<span class="sw-samp-stage-name">${frappe.utils.escape_html(stage.stage_name)}</span>
+						${stage.is_added_for_style ? `<span class="sw-pill sw-pill-mut">added</span>` : ""}
+						<span class="sw-pill sw-pill-mut" title="Dependency">${frappe.utils.escape_html(depBadge)}</span>
+						<span class="sw-samp-owner">${frappe.utils.escape_html(stage.owner_user || "—")}</span>
+						<span class="sw-samp-status">${stage.status}</span>
+						<span class="sw-samp-closure">${stage.closure_date ? frappe.datetime.str_to_user(stage.closure_date) : ""}</span>
+					</div>
+					<div class="sw-samp-versions" style="display:${expanded ? "block" : "none"}">
+						${versionRows}
+						<div class="sw-samp-stage-actions">
+							<button class="sw-btn sw-btn-sm sw-samp-add-version" data-stage="${stage.name}">+ New version</button>
+							${!(stage.status || "").startsWith("Closed") ? `<button class="sw-btn sw-btn-sm sw-samp-drop-stage" data-stage="${stage.name}">Drop stage</button>` : ""}
+						</div>
+					</div>
+				</div>`;
+		}).join("");
+
+		const selectedStage = (s.stages || []).find(st => st.name === this.sampling_selected_stage);
+		const selectedVersion = selectedStage && (selectedStage.versions || []).find(v => v.name === this.sampling_selected_version);
+
+		let detailHtml = `<div class="sw-card"><div class="sw-card-b"><div class="sw-empty">Select or create a version to see its detail.</div></div></div>`;
+		if (selectedStage && selectedVersion) {
+			const v = selectedVersion;
+			const obsRows = (v.observations || []).length
+				? v.observations.map(o => `<div class="sw-samp-obs sw-samp-obs-${(o.status || "").toLowerCase().replace(/\s+/g, "-")}">
+						<span class="sw-samp-obs-seq">#${o.seq}</span>
+						<span class="sw-pill sw-pill-mut">${frappe.utils.escape_html(o.category || "—")}</span>
+						<span class="sw-samp-obs-text">${frappe.utils.escape_html(o.observation_text || "")}</span>
+						<span class="sw-samp-obs-status">${o.status}</span>
+					</div>`).join("")
+				: `<div class="sw-empty">No observations on this version.</div>`;
+
+			const actions = [];
+			if (v.status === "In Progress") actions.push(`<button class="sw-btn sw-btn-sm" id="swMarkSubmitted">Mark submitted</button>`);
+			if (v.status === "Submitted") {
+				actions.push(`<button class="sw-btn sw-btn-pri sw-btn-sm" id="swApproveVersion">Approve</button>`);
+				actions.push(`<button class="sw-btn sw-btn-sm" id="swReviseVersion">Revise…</button>`);
+			}
+			if (["In Progress", "Submitted"].includes(v.status)) actions.push(`<button class="sw-btn sw-btn-sm" id="swCancelVersion">Cancel</button>`);
+			if (["In Progress", "Submitted"].includes(v.status)) actions.push(`<button class="sw-btn sw-btn-sm" id="swAddObservation">+ Add observation</button>`);
+
+			detailHtml = `
+				<div class="sw-card">
+					<div class="sw-card-h">
+						<h2>${frappe.utils.escape_html(selectedStage.stage_name)} — v${v.version_no}</h2>
+						<span class="sw-pill ${versionDot[v.status] || "pill-mut"}">${v.status}</span>
+					</div>
+					<div class="sw-card-b">
+						${v.dependency_override ? `<div class="sw-banner sw-banner-warn"><span>Created against an unsatisfied Advisory dependency: ${frappe.utils.escape_html(v.dependency_override_reason || "")}</span></div>` : ""}
+						<div class="sw-attr"><span>Owner</span><span>${frappe.utils.escape_html(selectedStage.owner_user || "—")}</span></div>
+						<div class="sw-attr"><span>Received</span><span>${v.received_on ? frappe.datetime.str_to_user(v.received_on) : "—"}</span></div>
+						<div class="sw-attr"><span>Decided</span><span>${v.decided_on ? frappe.datetime.str_to_user(v.decided_on) + " · " + frappe.utils.escape_html(v.decided_by || "") : "—"}</span></div>
+						<div class="sw-attr"><span>Sample cost</span><span>${v.sample_cost != null ? v.sample_cost : "—"}${v.is_recoverable ? " (recoverable)" : ""}</span></div>
+						<h3 style="margin:14px 0 6px;font-size:13px">Observations</h3>
+						<div class="sw-samp-obs-list">${obsRows}</div>
+						<div class="sw-samp-actions" style="margin-top:12px">${actions.join("")}</div>
+					</div>
+				</div>`;
+		}
+
+		$panels.html(`
+			<div class="sw-samp-layout">
+				<div class="sw-samp-left">
+					<div class="sw-card-h" style="padding:0 0 8px"><h2>Stages</h2><div class="right"><button class="sw-btn sw-btn-sm" id="swAddSampleStage">+ Add stage</button></div></div>
+					${stageRows || `<div class="sw-empty">No stages.</div>`}
+				</div>
+				<div class="sw-samp-right">${detailHtml}</div>
+			</div>
+		`);
+		this.bind_sampling_tab($panels);
+	}
+
+	bind_sampling_tab($panels) {
+		$panels.on("click", "[data-stage-toggle]", (e) => {
+			const stage = $(e.currentTarget).data("stage-toggle");
+			this.sampling_selected_stage = (this.sampling_selected_stage === stage) ? null : stage;
+			this.paint_sampling_tab($panels);
+		});
+		$panels.on("click", ".sw-samp-version", (e) => {
+			this.sampling_selected_stage = $(e.currentTarget).data("stage");
+			this.sampling_selected_version = $(e.currentTarget).data("version");
+			this.paint_sampling_tab($panels);
+		});
+		$panels.on("click", "#swAddSampleStage", () => this.prompt_add_sample_stage($panels));
+		$panels.on("click", ".sw-samp-add-version", (e) => {
+			const stage = $(e.currentTarget).data("stage");
+			frappe.dom.freeze("Creating…");
+			frappe.call({
+				method: "apparel_erp.product_development.sampling.create_version",
+				args: { stage, carry_observations: 1 },
+				callback: (r) => {
+					frappe.dom.unfreeze();
+					this.workspace_sampling = r.message;
+					this.sampling_selected_stage = stage;
+					this.sampling_selected_version = r.message.created_version;
+					sw_toast(this.wrapper, "New version created.");
+					this.paint_sampling_tab($panels);
+				},
+				error: () => frappe.dom.unfreeze()
+			});
+		});
+		$panels.on("click", ".sw-samp-drop-stage", (e) => {
+			const stage = $(e.currentTarget).data("stage");
+			frappe.confirm(__("Drop this stage? It won't be pursued for this style."), () => {
+				frappe.call({
+					method: "apparel_erp.product_development.sampling.drop_stage",
+					args: { stage },
+					callback: (r) => { this.workspace_sampling = r.message; this.paint_sampling_tab($panels); }
+				});
+			});
+		});
+		$panels.on("click", "#swMarkSubmitted", () => this.sampling_version_action("mark_version_submitted", {}, "Marked submitted."));
+		$panels.on("click", "#swCancelVersion", () => {
+			frappe.confirm(__("Cancel this version?"), () => this.sampling_version_action("cancel_version", {}, "Version cancelled."));
+		});
+		$panels.on("click", "#swApproveVersion", () => this.prompt_decide_version($panels, "Approved"));
+		$panels.on("click", "#swReviseVersion", () => this.prompt_decide_version($panels, "Revised"));
+		$panels.on("click", "#swAddObservation", () => this.prompt_add_observation($panels));
+	}
+
+	sampling_version_action(method, extraArgs, toastMsg) {
+		const $panels = $(this.wrapper).find("#swPanels");
+		frappe.dom.freeze("Saving…");
+		frappe.call({
+			method: `apparel_erp.product_development.sampling.${method}`,
+			args: Object.assign({ version: this.sampling_selected_version }, extraArgs),
+			callback: (r) => {
+				frappe.dom.unfreeze();
+				this.workspace_sampling = r.message;
+				sw_toast(this.wrapper, toastMsg);
+				this.paint_sampling_tab($panels);
+			},
+			error: () => frappe.dom.unfreeze()
+		});
+	}
+
+	prompt_create_sample_plan($panels) {
+		const d = new frappe.ui.Dialog({
+			title: "Set up sample plan",
+			fields: [
+				{ fieldname: "customer", label: "Customer", fieldtype: "Data" },
+				{ fieldname: "season", label: "Season", fieldtype: "Data" },
+				{ fieldname: "template", label: "Sampling Template", fieldtype: "Link", options: "Sampling Template",
+					description: "Leave blank to auto-resolve by customer/category, then category, then the default template." }
+			],
+			primary_action_label: "Create",
+			primary_action: (values) => {
+				frappe.dom.freeze("Creating…");
+				frappe.call({
+					method: "apparel_erp.product_development.sampling.create_plan",
+					args: { style: this.style.name, customer: values.customer, season: values.season, template: values.template },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						d.hide();
+						this.workspace_sampling = r.message;
+						this.sampling_selected_stage = (r.message.stages[0] || {}).name;
+						sw_toast(this.wrapper, "Sample plan created.");
+						this.paint_sampling_tab($panels);
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			}
+		});
+		d.show();
+	}
+
+	prompt_add_sample_stage($panels) {
+		const stageOptions = (this.workspace_sampling.stages || []).map(s => s.stage_name);
+		const d = new frappe.ui.Dialog({
+			title: "Add stage",
+			fields: [
+				{ fieldname: "stage_name", label: "Stage Name", fieldtype: "Data", reqd: 1 },
+				{ fieldname: "after", label: "Depends On (optional)", fieldtype: "Select", options: [""].concat(stageOptions).join("\n") },
+				{ fieldname: "dependency_type", label: "Dependency Type", fieldtype: "Select", options: "Blocking\nAdvisory", default: "Blocking" }
+			],
+			primary_action_label: "Add",
+			primary_action: (values) => {
+				frappe.dom.freeze("Adding…");
+				frappe.call({
+					method: "apparel_erp.product_development.sampling.add_stage",
+					args: { plan: this.workspace_sampling.plan.name, stage_name: values.stage_name, after: values.after || null, dependency_type: values.dependency_type },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						d.hide();
+						this.workspace_sampling = r.message;
+						sw_toast(this.wrapper, `${values.stage_name} added.`);
+						this.paint_sampling_tab($panels);
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			}
+		});
+		d.show();
+	}
+
+	prompt_decide_version($panels, decision) {
+		const fields = [];
+		if (decision === "Revised") {
+			fields.push({ fieldname: "reason_category", label: "Reason Category", fieldtype: "Link", options: "Observation Category", reqd: 1 });
+		}
+		const d = new frappe.ui.Dialog({
+			title: decision === "Approved" ? "Approve version" : "Mark revised",
+			fields,
+			primary_action_label: decision,
+			primary_action: (values) => {
+				frappe.dom.freeze("Saving…");
+				frappe.call({
+					method: "apparel_erp.product_development.sampling.decide_version",
+					args: { version: this.sampling_selected_version, decision, reason_category: values.reason_category },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						d.hide();
+						this.workspace_sampling = r.message;
+						if (r.message.successor_version) {
+							this.sampling_selected_version = r.message.successor_version;
+							sw_toast(this.wrapper, `Revised - new version ${r.message.successor_version} created.`);
+						} else {
+							sw_toast(this.wrapper, "Version approved.");
+						}
+						this.paint_sampling_tab($panels);
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			}
+		});
+		d.show();
+	}
+
+	prompt_add_observation($panels) {
+		const d = new frappe.ui.Dialog({
+			title: "Add observation",
+			fields: [
+				{ fieldname: "category", label: "Category", fieldtype: "Link", options: "Observation Category" },
+				{ fieldname: "observation_text", label: "Observation", fieldtype: "Small Text", reqd: 1 }
+			],
+			primary_action_label: "Add",
+			primary_action: (values) => {
+				frappe.dom.freeze("Adding…");
+				frappe.call({
+					method: "apparel_erp.product_development.sampling.add_observation",
+					args: { version: this.sampling_selected_version, observation_text: values.observation_text, category: values.category },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						d.hide();
+						this.workspace_sampling = r.message;
+						this.paint_sampling_tab($panels);
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			}
+		});
+		d.show();
+	}
+
 	// ---------- Time & Action ----------
 	render_tna_tab($panels) {
 		$panels.html(`<div class="sw-loading">Loading time &amp; action…</div>`);
@@ -2485,6 +2797,31 @@ const SW_CSS = `
 .sw-f input:focus,.sw-f select:focus{border-color:var(--sw-accent);outline:none}
 .sw-f input[readonly],.sw-f select:disabled{background:#F8FAFC;color:var(--sw-ink-2)}
 .sw-cell{width:76px;padding:4px 6px;border:1px solid var(--sw-line-2);border-radius:4px;text-align:right;font:inherit}
+.sw-samp-layout{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;align-items:start}
+@media(max-width:1000px){.sw-samp-layout{grid-template-columns:1fr}}
+.sw-samp-stage{border:1px solid var(--sw-line);border-radius:var(--sw-r-sm);margin-bottom:8px;background:#fff}
+.sw-samp-stage-head{display:flex;align-items:center;gap:8px;padding:9px 10px;cursor:pointer;font-size:13px}
+.sw-samp-stage-name{font-weight:600}
+.sw-samp-owner{color:var(--sw-ink-2);font-size:12px}
+.sw-samp-status{margin-left:auto;font-size:11px;color:var(--sw-ink-2)}
+.sw-samp-closure{font-size:12px;color:var(--sw-ink-2);min-width:74px;text-align:right}
+.sw-samp-versions{border-top:1px solid var(--sw-line);padding:6px 10px}
+.sw-samp-version{display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:12.5px;cursor:pointer;border-radius:4px}
+.sw-samp-version:hover{background:var(--sw-bg-2)}
+.sw-samp-version.sel{background:var(--sw-accent-10,#EEF4FF)}
+.sw-samp-vno{font-weight:600;width:26px}
+.sw-samp-desc{flex:1;color:var(--sw-ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw-samp-obscount{font-size:11px;color:var(--sw-ink-2)}
+.sw-samp-vstatus{font-size:11px;color:var(--sw-ink-2);min-width:70px;text-align:right}
+.sw-samp-stage-actions{display:flex;gap:8px;margin-top:6px}
+.sw-samp-obs-list{display:flex;flex-direction:column;gap:6px}
+.sw-samp-obs{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 0;border-bottom:1px dashed var(--sw-line)}
+.sw-samp-obs:last-child{border:none}
+.sw-samp-obs-seq{color:var(--sw-ink-2);width:22px}
+.sw-samp-obs-text{flex:1}
+.sw-samp-obs-status{font-size:11px;color:var(--sw-ink-2)}
+.sw-samp-obs-resolved .sw-samp-obs-text{text-decoration:line-through;color:var(--sw-ink-2)}
+.sw-samp-actions{display:flex;gap:8px;flex-wrap:wrap}
 .sw-extra-table{width:100%;border-collapse:collapse;font-size:13px}
 .sw-extra-table th{text-align:left;font-weight:500;color:var(--sw-ink-2);font-size:11px;padding:4px 4px}
 .sw-extra-table td{padding:3px 4px}

@@ -1,0 +1,26 @@
+{
+  "doctype": "DocType",
+  "name": "Observation Item",
+  "module": "Product Development",
+  "istable": 1,
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "fields": [
+    {
+      "fieldname": "category",
+      "fieldtype": "Link",
+      "options": "Observation Category",
+      "label": "Category",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "observation_text",
+      "fieldtype": "Data",
+      "label": "Observation",
+      "reqd": 1,
+      "in_list_view": 1
+    }
+  ],
+  "permissions": []
+}

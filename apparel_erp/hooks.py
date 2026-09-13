@@ -21,7 +21,8 @@ doctype_js = {
 # Data records shipped with the app - installed/updated on `bench migrate`
 fixtures = [
     {"doctype": "Print Format", "filters": [["name", "=", "Tech Pack Sheet"]]},
-    {"doctype": "Custom Field", "filters": [["dt", "=", "BOM"], ["fieldname", "in", ["custom_style", "custom_style_bom", "custom_style_bom_version", "custom_colourway"]]]}
+    {"doctype": "Custom Field", "filters": [["dt", "=", "BOM"], ["fieldname", "in", ["custom_style", "custom_style_bom", "custom_style_bom_version", "custom_colourway"]]]},
+    {"doctype": "Observation Category"}
 ]
 
 # Generated BOMs are read-only forever (spec section 7.1). Enforced here at

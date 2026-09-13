@@ -1,0 +1,50 @@
+{
+  "doctype": "DocType",
+  "name": "Sample Plan",
+  "module": "Product Development",
+  "naming_rule": "Expression",
+  "autoname": "format:SMP-{style}-{#####}",
+  "engine": "InnoDB",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "style",
+      "fieldtype": "Link",
+      "options": "Style",
+      "label": "Style",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "description": "Links to the Style record (this app never puts a garment on ERPNext's Item doctype until SKU generation - see the module's placement note)."
+    },
+    {
+      "fieldname": "customer",
+      "fieldtype": "Data",
+      "label": "Customer",
+      "fetch_from": "style.customer_brand",
+      "in_list_view": 1
+    },
+    {"fieldname": "season", "fieldtype": "Data", "label": "Season", "fetch_from": "style.season"},
+    {"fieldname": "cb1", "fieldtype": "Column Break"},
+    {
+      "fieldname": "sampling_template",
+      "fieldtype": "Link",
+      "options": "Sampling Template",
+      "label": "Sampling Template",
+      "description": "Recorded for drift reporting even though templates are editable after the fact (existing plans snapshot their stage rows at creation)."
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "options": "Draft\nActive\nClosed",
+      "default": "Draft",
+      "label": "Status",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    }
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "All", "read": 1, "write": 1, "create": 1}
+  ]
+}

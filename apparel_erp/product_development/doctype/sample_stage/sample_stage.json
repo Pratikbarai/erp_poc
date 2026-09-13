@@ -1,0 +1,79 @@
+{
+  "doctype": "DocType",
+  "name": "Sample Stage",
+  "module": "Product Development",
+  "naming_rule": "Expression",
+  "autoname": "format:SMS-{#####}",
+  "engine": "InnoDB",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "sample_plan",
+      "fieldtype": "Link",
+      "options": "Sample Plan",
+      "label": "Sample Plan",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "stage_name",
+      "fieldtype": "Data",
+      "label": "Stage",
+      "reqd": 1,
+      "in_list_view": 1,
+      "description": "Copied from the template at plan creation, or typed when added for this style specifically."
+    },
+    {
+      "fieldname": "source_template_stage",
+      "fieldtype": "Data",
+      "label": "Source Template Stage",
+      "read_only": 1,
+      "description": "Blank when this stage was added for this style rather than seeded from a template."
+    },
+    {
+      "fieldname": "is_added_for_style",
+      "fieldtype": "Check",
+      "label": "Added For This Style",
+      "read_only": 1,
+      "description": "Drives the 'added' badge in the workspace and drift reporting against the template."
+    },
+    {"fieldname": "cb1", "fieldtype": "Column Break"},
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "options": "Blocked\nNot Started\nIn Progress\nClosed - Approved\nClosed - Dropped",
+      "default": "Not Started",
+      "label": "Status",
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "description": "Derived from dependencies and version state on every plan load/version event - see sampling.recompute_stage_status(). The only value ever set directly by a user is Closed - Dropped."
+    },
+    {"fieldname": "planned_date", "fieldtype": "Date", "label": "Planned Date", "description": "Seeded from the template's default_tat_days."},
+    {"fieldname": "closure_date", "fieldtype": "Date", "label": "Closure Date", "read_only": 1, "description": "Set automatically when status becomes Closed - *. Cannot precede the latest version's decided_on."},
+    {"fieldname": "sb_deps", "fieldtype": "Section Break", "label": "Dependencies"},
+    {
+      "fieldname": "depends_on",
+      "fieldtype": "Small Text",
+      "label": "Depends On",
+      "description": "JSON list of stage_name values within this same plan - a per-style-editable snapshot of the template's dependency rule for this stage."
+    },
+    {
+      "fieldname": "dependency_type",
+      "fieldtype": "Select",
+      "options": "Blocking\nAdvisory",
+      "default": "Blocking",
+      "label": "Dependency Type"
+    },
+    {"fieldname": "cb2", "fieldtype": "Column Break"},
+    {"fieldname": "owner_user", "fieldtype": "Link", "options": "User", "label": "Owner", "description": "Editable per style, independent of the template's owner_role default."},
+    {"fieldname": "contributors", "fieldtype": "Table MultiSelect", "options": "Sample Stage Contributor", "label": "Contributors", "description": "Read+write on this stage's versions (see the module's permission model)."},
+    {"fieldname": "sb_other", "fieldtype": "Section Break", "label": "Other"},
+    {"fieldname": "observation_set", "fieldtype": "Link", "options": "Observation Set", "label": "Observation Set"},
+    {"fieldname": "colourway", "fieldtype": "Data", "label": "Colourway", "description": "Free text - relevant for lab dips and colour-specific rounds. See the module's material-sample exception note for why this stays free text in the PoC."}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "All", "read": 1, "write": 1, "create": 1}
+  ]
+}

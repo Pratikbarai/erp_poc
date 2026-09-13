@@ -1,0 +1,58 @@
+{
+  "doctype": "DocType",
+  "name": "Sampling Template",
+  "module": "Product Development",
+  "naming_rule": "By fieldname",
+  "autoname": "field:template_name",
+  "engine": "InnoDB",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "template_name",
+      "fieldtype": "Data",
+      "label": "Template Name",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1,
+      "description": "e.g. 'Woven Tops - Standard'."
+    },
+    {
+      "fieldname": "product_category",
+      "fieldtype": "Link",
+      "options": "Item Group",
+      "label": "Product Category",
+      "description": "Optional scope. Resolution order when a plan is created: customer + category, then category, then the default template."
+    },
+    {
+      "fieldname": "customer",
+      "fieldtype": "Data",
+      "label": "Customer",
+      "description": "Optional scope, free text (this app does not use a separate Customer master)."
+    },
+    {"fieldname": "cb1", "fieldtype": "Column Break"},
+    {
+      "fieldname": "is_default",
+      "fieldtype": "Check",
+      "label": "Default Template",
+      "description": "At most one default template is kept active at a time - marking this one unsets any other."
+    },
+    {
+      "fieldname": "is_active",
+      "fieldtype": "Check",
+      "label": "Active",
+      "default": "1",
+      "description": "Inactive templates cannot seed new plans."
+    },
+    {"fieldname": "sb_stages", "fieldtype": "Section Break", "label": "Stages"},
+    {
+      "fieldname": "stages",
+      "fieldtype": "Table",
+      "options": "Sampling Template Stage",
+      "label": "Stages"
+    }
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "All", "read": 1}
+  ]
+}

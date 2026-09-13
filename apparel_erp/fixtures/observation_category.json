@@ -1,0 +1,34 @@
+[
+ {
+  "doctype": "Observation Category",
+  "category_name": "Fit"
+ },
+ {
+  "doctype": "Observation Category",
+  "category_name": "Measurement"
+ },
+ {
+  "doctype": "Observation Category",
+  "category_name": "Fabric"
+ },
+ {
+  "doctype": "Observation Category",
+  "category_name": "Trim"
+ },
+ {
+  "doctype": "Observation Category",
+  "category_name": "Workmanship"
+ },
+ {
+  "doctype": "Observation Category",
+  "category_name": "Print"
+ },
+ {
+  "doctype": "Observation Category",
+  "category_name": "Cost"
+ },
+ {
+  "doctype": "Observation Category",
+  "category_name": "Other"
+ }
+]
