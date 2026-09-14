@@ -1,34 +1,42 @@
 [
- {
-  "doctype": "Observation Category",
-  "category_name": "Fit"
- },
- {
-  "doctype": "Observation Category",
-  "category_name": "Measurement"
- },
- {
-  "doctype": "Observation Category",
-  "category_name": "Fabric"
- },
- {
-  "doctype": "Observation Category",
-  "category_name": "Trim"
- },
- {
-  "doctype": "Observation Category",
-  "category_name": "Workmanship"
- },
- {
-  "doctype": "Observation Category",
-  "category_name": "Print"
- },
- {
-  "doctype": "Observation Category",
-  "category_name": "Cost"
- },
- {
-  "doctype": "Observation Category",
-  "category_name": "Other"
- }
+    {
+        "doctype": "Observation Category",
+        "name": "Fit",
+        "category_name": "Fit"
+    },
+    {
+        "doctype": "Observation Category",
+        "name": "Measurement",
+        "category_name": "Measurement"
+    },
+    {
+        "doctype": "Observation Category",
+        "name": "Fabric",
+        "category_name": "Fabric"
+    },
+    {
+        "doctype": "Observation Category",
+        "name": "Trim",
+        "category_name": "Trim"
+    },
+    {
+        "doctype": "Observation Category",
+        "name": "Workmanship",
+        "category_name": "Workmanship"
+    },
+    {
+        "doctype": "Observation Category",
+        "name": "Print",
+        "category_name": "Print"
+    },
+    {
+        "doctype": "Observation Category",
+        "name": "Cost",
+        "category_name": "Cost"
+    },
+    {
+        "doctype": "Observation Category",
+        "name": "Other",
+        "category_name": "Other"
+    }
 ]
