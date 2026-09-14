@@ -554,6 +554,7 @@ class StyleWorkspace {
 								${c.swatch ? `<span class="sw-swatch" style="background:${c.swatch}"></span>` : ""}
 								<span>${frappe.utils.escape_html(c.colour_name)}</span>
 								<span class="sw-muted" style="margin-left:auto">${frappe.utils.escape_html(c.colour_code || "")}</span>
+								<span class="sw-pill sw-colour-approve ${c.approved_for_production ? "sw-pill-ok" : "sw-pill-warn"}" data-idx="${i}" title="Click to toggle - required for this colour to appear in the matrix and count toward BOM/SKU generation">${c.approved_for_production ? "Approved" : "Not approved ⚠"}</span>
 								<span class="sw-x" data-idx="${i}" title="Remove">&times;</span>
 							</div>`).join("") : `<div class="sw-empty">No colours yet.</div>`}
 					</div>
@@ -631,6 +632,13 @@ class StyleWorkspace {
 				this.save_and_refresh("colours");
 			});
 		});
+		$panels.find(".sw-colour-approve").on("click", (e) => {
+			const idx = $(e.currentTarget).data("idx");
+			const colours = (this.style.colours || []).filter(c => (c.status || "Active") === "Active");
+			const row = colours[idx];
+			row.approved_for_production = row.approved_for_production ? 0 : 1;
+			this.save_and_refresh("colours");
+		});
 		$panels.find(".sw-card:eq(1) .sw-x").on("click", (e) => {
 			const idx = $(e.currentTarget).data("idx");
 			const row = (this.style.sizes || [])[idx];
@@ -646,11 +654,16 @@ class StyleWorkspace {
 			[
 				{ fieldname: "colour_name", label: "Colour Name", fieldtype: "Data", reqd: 1 },
 				{ fieldname: "colour_code", label: "Colour Code", fieldtype: "Data", reqd: 1 },
-				{ fieldname: "swatch", label: "Swatch", fieldtype: "Color" }
+				{ fieldname: "swatch", label: "Swatch", fieldtype: "Color" },
+				{ fieldname: "approved_for_production", label: "Approved for Production", fieldtype: "Check", default: 1,
+					description: "Required before this colour gets a row in the Colour x size matrix, or counts toward BOM/SKU generation." }
 			],
 			(values) => {
 				this.style.colours = this.style.colours || [];
-				this.style.colours.push({ colour_name: values.colour_name, colour_code: values.colour_code, swatch: values.swatch, status: "Active" });
+				this.style.colours.push({
+					colour_name: values.colour_name, colour_code: values.colour_code, swatch: values.swatch,
+					approved_for_production: values.approved_for_production ? 1 : 0, status: "Active"
+				});
 				this.save_and_refresh("colours");
 			},
 			"Add colour",
