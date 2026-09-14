@@ -372,6 +372,38 @@ def generate_production_boms(style_bom_name):
 
 
 @frappe.whitelist()
+def get_workspace_production_boms(style):
+	"""Backs the new Production BOM tab: the ERPNext BOM documents that
+	generate_production_boms has actually created for this style, plus
+	enough context about the submitted Style BOM driving the next
+	generation run to let the tab offer that action directly instead of
+	sending the user to the Style BOM form."""
+	sb_name = frappe.db.get_value(
+		"Style BOM", {"style": style, "docstatus": 1}, "name", order_by="version desc"
+	)
+	style_bom_info = None
+	if sb_name:
+		sb = frappe.get_doc("Style BOM", sb_name)
+		style_bom_info = {
+			"name": sb.name,
+			"version": sb.version,
+			"bom_type": sb.bom_type,
+			"bom_generation_mode": sb.get("bom_generation_mode"),
+		}
+
+	boms = frappe.get_all(
+		"BOM",
+		filters={"custom_style": style},
+		fields=["name", "item", "item_name", "docstatus", "is_active", "is_default",
+				"custom_colourway", "custom_size", "custom_style_bom", "custom_style_bom_version",
+				"total_cost", "creation"],
+		order_by="custom_colourway asc, custom_size asc, creation desc",
+	)
+
+	return {"style_bom": style_bom_info, "boms": boms, "count": len(boms)}
+
+
+@frappe.whitelist()
 def set_bom_generation_mode(style_bom_name, mode):
 	"""Lets the workspace set this directly - including on an already
 	submitted Style BOM, which is exactly the case that used to leave
