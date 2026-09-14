@@ -619,7 +619,9 @@ function generate_all_skus(frm) {
 
 	// Generation now happens on the Style BOM document (gated: Style
 	// Confirmed, PP approved, Lab Dip approved per colourway, etc) and
-	// covers every active + approved colourway in one go.
+	// covers every active + approved colourway in one go. Any submitted
+	// Style BOM can drive it now, not just Bulk-type ones (see
+	// generate_production_boms in style_bom.py).
 	frappe.call({
 		method: "apparel_erp.product_development.doctype.style.style.get_latest_style_bom",
 		args: { style: frm.doc.name }
@@ -627,16 +629,8 @@ function generate_all_skus(frm) {
 		if (!r.message) {
 			frappe.msgprint({
 				title: __("No Style BOM yet"),
-				message: __("Create and submit a Bulk Style BOM for this Style first."),
+				message: __("Create and submit a Style BOM for this Style first."),
 				primary_action: { label: __("Open/Create Style BOM"), action: () => open_style_bom(frm) }
-			});
-			return;
-		}
-		if (r.message.bom_type !== "Bulk") {
-			frappe.msgprint({
-				title: __("Style BOM is Development type"),
-				message: __("Style BOM {0} (v{1}) is Development type. Only a Bulk Style BOM can generate production BOMs.", [r.message.name, r.message.version]),
-				primary_action: { label: __("Open Style BOM"), action: () => frappe.set_route("Form", "Style BOM", r.message.name) }
 			});
 			return;
 		}
