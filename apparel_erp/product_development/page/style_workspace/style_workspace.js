@@ -2780,7 +2780,7 @@ const SW_CSS = `
 .sw-pill-bad{background:var(--sw-bad-bg);color:var(--sw-bad)}
 .sw-pill-mut{background:#F1F5F9;color:var(--sw-ink-2)}
 .sw-dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}
-.sw-tabs{display:flex;gap:2px;margin-top:14px;overflow-x:auto}
+.sw-tabs{display:flex;gap:2px;margin-top:14px;flex-wrap:wrap;row-gap:6px}
 .sw-tabs button{padding:9px 14px;font-size:13px;color:var(--sw-ink-2);border-bottom:2px solid transparent;white-space:nowrap}
 .sw-tabs button:hover{color:var(--sw-ink)}
 .sw-tabs button.on{color:var(--sw-accent);border-bottom-color:var(--sw-accent);font-weight:500}
