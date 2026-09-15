@@ -1,0 +1,44 @@
+{
+  "doctype": "DocType",
+  "name": "Sample Photo",
+  "module": "Product Development",
+  "naming_rule": "Expression",
+  "autoname": "format:SMPH-{#####}",
+  "engine": "InnoDB",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "sample_version",
+      "fieldtype": "Link",
+      "options": "Sample Version",
+      "label": "Sample Version",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "image",
+      "fieldtype": "Attach Image",
+      "label": "Image",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {"fieldname": "caption", "fieldtype": "Data", "label": "Caption"},
+    {"fieldname": "cb1", "fieldtype": "Column Break"},
+    {
+      "fieldname": "capture_source",
+      "fieldtype": "Select",
+      "options": "Desktop\nMobile\nWhatsApp Inbound",
+      "default": "Desktop",
+      "label": "Capture Source",
+      "in_list_view": 1
+    },
+    {"fieldname": "captured_by", "fieldtype": "Link", "options": "User", "label": "Captured By", "read_only": 1},
+    {"fieldname": "captured_on", "fieldtype": "Datetime", "label": "Captured On", "read_only": 1},
+    {"fieldname": "is_primary", "fieldtype": "Check", "label": "Primary", "description": "Used for share previews."}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "All", "read": 1, "write": 1, "create": 1}
+  ]
+}

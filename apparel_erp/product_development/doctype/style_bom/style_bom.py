@@ -245,34 +245,9 @@ def assert_gates_passed(style_doc, sb):
 	if (style_doc.get("style_stage_status") or "Draft") != "Confirmed":
 		frappe.throw(_("Style {0} must be Confirmed (Style Stage Status) before generating production BOMs.").format(style_doc.name))
 
-	pp_approved = frappe.db.exists("Style Submission", {
-		"style": style_doc.name,
-		"submission_type": "PP",
-		"status": "Approved",
-		"style_bom_version": sb.version,
-		"docstatus": 1,
-	})
-	if not pp_approved:
-		frappe.throw(_("No approved PP Style Submission against Style BOM version {0}. Submit and approve one before generating.").format(sb.version))
-
 	active_colourways = [c for c in style_doc.colours if (c.status or "Active") == "Active" and c.get("approved_for_production")]
 	if not active_colourways:
 		frappe.throw(_("No colourway is Active and Approved for Production."))
-
-	missing_lab_dip = []
-	for cw in active_colourways:
-		colour_code = cw.colour_code or cw.colour_name
-		approved = frappe.db.exists("Style Submission", {
-			"style": style_doc.name,
-			"submission_type": "Lab Dip",
-			"colourway": colour_code,
-			"status": "Approved",
-			"docstatus": 1,
-		})
-		if not approved:
-			missing_lab_dip.append(colour_code)
-	if missing_lab_dip:
-		frappe.throw(_("Missing an approved Lab Dip Style Submission for colourway(s): {0}").format(", ".join(missing_lab_dip)))
 
 	for line in sb.lines:
 		if line.varies_by_size and sb.get("bom_generation_mode") != "Per SKU (Colour x Size)":

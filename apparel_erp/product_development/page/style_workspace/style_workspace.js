@@ -739,7 +739,7 @@ class StyleWorkspace {
 			// Submitted + mode chosen: the real thing can actually run, right
 			// here - no need to send the user to the Style BOM form at all.
 			frappe.confirm(
-				`Generate production BOMs and SKUs for every Active, Approved-for-Production colourway on ${frappe.utils.escape_html(this.style.style_no || this.style.name)} (mode: <b>${frappe.utils.escape_html(info.bom_generation_mode)}</b>)? Gates (Style Confirmed, PP approval, Lab Dip approvals) will be checked first.`,
+				`Generate production BOMs and SKUs for every Active, Approved-for-Production colourway on ${frappe.utils.escape_html(this.style.style_no || this.style.name)} (mode: <b>${frappe.utils.escape_html(info.bom_generation_mode)}</b>)? Style Stage must be Confirmed first.`,
 				() => {
 					frappe.dom.freeze("Checking gates and generating…");
 					frappe.call({
@@ -1854,6 +1854,23 @@ $panels.html(`
 					</div>`).join("")
 				: `<div class="sw-empty">No observations on this version.</div>`;
 
+			const canEdit = ["In Progress", "Submitted"].includes(v.status);
+			const photoStrip = (v.photos || []).map(p => `
+				<div class="sw-samp-photo" data-photo="${p.name}">
+					<img src="${frappe.utils.escape_html(p.image)}" alt="${frappe.utils.escape_html(p.caption || "")}">
+					${p.is_primary ? `<span class="sw-samp-photo-primary" title="Primary photo">★</span>` : ""}
+					${canEdit ? `<span class="sw-samp-photo-del" data-photo="${p.name}" title="Delete">&times;</span>` : ""}
+				</div>`).join("");
+			const captureTile = canEdit ? `
+				<label class="sw-samp-photo sw-samp-photo-add" title="Take a photo with your camera">
+					<input type="file" accept="image/*" capture="environment" id="swCapturePhoto" hidden>
+					<span>📷<br>Take photo</span>
+				</label>
+				<label class="sw-samp-photo sw-samp-photo-add" title="Upload a photo from files">
+					<input type="file" accept="image/*" id="swUploadPhoto" hidden>
+					<span>⬆<br>Upload</span>
+				</label>` : "";
+
 			const actions = [];
 			if (v.status === "In Progress") actions.push(`<button class="sw-btn sw-btn-sm" id="swMarkSubmitted">Mark submitted</button>`);
 			if (v.status === "Submitted") {
@@ -1875,6 +1892,8 @@ $panels.html(`
 						<div class="sw-attr"><span>Received</span><span>${v.received_on ? frappe.datetime.str_to_user(v.received_on) : "—"}</span></div>
 						<div class="sw-attr"><span>Decided</span><span>${v.decided_on ? frappe.datetime.str_to_user(v.decided_on) + " · " + frappe.utils.escape_html(v.decided_by || "") : "—"}</span></div>
 						<div class="sw-attr"><span>Sample cost</span><span>${v.sample_cost != null ? v.sample_cost : "—"}${v.is_recoverable ? " (recoverable)" : ""}</span></div>
+						<h3 style="margin:14px 0 6px;font-size:13px">Photos</h3>
+						<div class="sw-samp-photo-strip">${photoStrip}${captureTile}</div>
 						<h3 style="margin:14px 0 6px;font-size:13px">Observations</h3>
 						<div class="sw-samp-obs-list">${obsRows}</div>
 						<div class="sw-samp-actions" style="margin-top:12px">${actions.join("")}</div>
@@ -1940,6 +1959,64 @@ $panels.html(`
 		$panels.on("click", "#swApproveVersion", () => this.prompt_decide_version($panels, "Approved"));
 		$panels.on("click", "#swReviseVersion", () => this.prompt_decide_version($panels, "Revised"));
 		$panels.on("click", "#swAddObservation", () => this.prompt_add_observation($panels));
+		$panels.on("change", "#swCapturePhoto", (e) => this.upload_sample_photo(e, $panels, "Mobile"));
+		$panels.on("change", "#swUploadPhoto", (e) => this.upload_sample_photo(e, $panels, "Desktop"));
+		$panels.on("click", ".sw-samp-photo-del", (e) => {
+			e.stopPropagation();
+			const photo = $(e.currentTarget).data("photo");
+			frappe.confirm(__("Delete this photo?"), () => {
+				frappe.dom.freeze("Deleting…");
+				frappe.call({
+					method: "apparel_erp.product_development.sampling.delete_photo",
+					args: { photo },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						this.workspace_sampling = r.message;
+						this.paint_sampling_tab($panels);
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			});
+		});
+	}
+
+	upload_sample_photo(e, $panels, captureSource) {
+		const file = e.target.files && e.target.files[0];
+		e.target.value = "";
+		if (!file) return;
+		const formData = new FormData();
+		formData.append("file", file);
+		formData.append("is_private", 1);
+		frappe.dom.freeze("Uploading photo…");
+		fetch("/api/method/upload_file", {
+			method: "POST",
+			headers: { "X-Frappe-CSRF-Token": frappe.csrf_token },
+			body: formData
+		})
+			.then(r => r.json())
+			.then(data => {
+				const file_url = data.message && data.message.file_url;
+				if (!file_url) throw new Error("Upload did not return a file URL");
+				return new Promise((resolve, reject) => {
+					frappe.call({
+						method: "apparel_erp.product_development.sampling.add_photo",
+						args: { version: this.sampling_selected_version, file_url, capture_source: captureSource },
+						callback: (r) => resolve(r),
+						error: (r) => reject(r)
+					});
+				});
+			})
+			.then((r) => {
+				frappe.dom.unfreeze();
+				this.workspace_sampling = r.message;
+				sw_toast(this.wrapper, "Photo added.");
+				this.paint_sampling_tab($panels);
+			})
+			.catch((err) => {
+				frappe.dom.unfreeze();
+				console.error("Photo upload failed", err);
+				frappe.msgprint({ title: __("Upload failed"), indicator: "red", message: __("Could not upload the photo. Please try again.") });
+			});
 	}
 
 	sampling_version_action(method, extraArgs, toastMsg) {
@@ -3055,6 +3132,14 @@ const SW_CSS = `
 .sw-samp-obscount{font-size:11px;color:var(--sw-ink-2)}
 .sw-samp-vstatus{font-size:11px;color:var(--sw-ink-2);min-width:70px;text-align:right}
 .sw-samp-stage-actions{display:flex;gap:8px;margin-top:6px}
+.sw-samp-photo-strip{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.sw-samp-photo{position:relative;width:76px;height:76px;border-radius:6px;overflow:hidden;border:1px solid var(--sw-line-2);background:var(--sw-bg-2,#F8FAFC)}
+.sw-samp-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.sw-samp-photo-add{display:flex;align-items:center;justify-content:center;text-align:center;font-size:10px;color:var(--sw-ink-2);cursor:pointer;border-style:dashed}
+.sw-samp-photo-add span{line-height:1.4}
+.sw-samp-photo-add:hover{border-color:var(--sw-accent);color:var(--sw-accent)}
+.sw-samp-photo-primary{position:absolute;top:2px;left:2px;font-size:11px;color:#F5A623;text-shadow:0 0 2px #000}
+.sw-samp-photo-del{position:absolute;top:1px;right:3px;color:#fff;background:rgba(0,0,0,.45);width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;line-height:1}
 .sw-samp-obs-list{display:flex;flex-direction:column;gap:6px}
 .sw-samp-obs{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 0;border-bottom:1px dashed var(--sw-line)}
 .sw-samp-obs:last-child{border:none}

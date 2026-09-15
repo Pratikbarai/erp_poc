@@ -16,7 +16,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, today
+from frappe.utils import add_days, now_datetime, today
 
 
 # ---------------------------------------------------------------------------
@@ -396,6 +396,66 @@ def add_observation(version, observation_text, category=None):
 
 
 @frappe.whitelist()
+def add_photo(version, file_url, caption=None, capture_source="Desktop"):
+	"""Backs the Sampling tab's camera/upload capture (spec 7 - the
+	differentiating feature). file_url comes from a prior plain
+	/api/method/upload_file call from the client; this just creates the
+	Sample Photo record and points it at that already-uploaded file.
+	The first photo on a version is automatically the primary one used
+	for share previews; deleting it promotes the next-oldest (see
+	SamplePhoto.on_trash)."""
+	if not file_url:
+		frappe.throw(_("No file uploaded."))
+	if not frappe.has_permission("Sample Photo", "create"):
+		frappe.throw(_("Not permitted to add a photo"))
+	doc = frappe.get_doc("Sample Version", version)
+	if doc.status not in ("In Progress", "Submitted"):
+		frappe.throw(_("Photos can only be added while a version is In Progress or Submitted."))
+
+	is_first = not frappe.db.exists("Sample Photo", {"sample_version": version})
+	source = capture_source if capture_source in ("Desktop", "Mobile", "WhatsApp Inbound") else "Desktop"
+	photo = frappe.get_doc({
+		"doctype": "Sample Photo",
+		"sample_version": version,
+		"image": file_url,
+		"caption": caption,
+		"capture_source": source,
+		"captured_by": frappe.session.user,
+		"captured_on": now_datetime(),
+		"is_primary": 1 if is_first else 0,
+	})
+	photo.insert(ignore_permissions=True)
+	# Point the already-uploaded File record at its real parent so it shows
+	# up under this Sample Photo (permissions/cleanup) instead of floating
+	# as an unattached upload.
+	frappe.db.set_value(
+		"File", {"file_url": file_url},
+		{"attached_to_doctype": "Sample Photo", "attached_to_name": photo.name},
+	)
+	frappe.db.commit()
+
+	stage_plan = frappe.db.get_value("Sample Stage", doc.sample_stage, "sample_plan")
+	style = frappe.db.get_value("Sample Plan", stage_plan, "style")
+	return get_workspace_sampling(style)
+
+
+@frappe.whitelist()
+def delete_photo(photo):
+	if not frappe.has_permission("Sample Photo", "delete"):
+		frappe.throw(_("Not permitted to delete a photo"))
+	doc = frappe.get_doc("Sample Photo", photo)
+	version = doc.sample_version
+	doc.delete(ignore_permissions=True)
+	frappe.db.commit()
+
+	stage_plan = frappe.db.get_value(
+		"Sample Stage", frappe.db.get_value("Sample Version", version, "sample_stage"), "sample_plan"
+	)
+	style = frappe.db.get_value("Sample Plan", stage_plan, "style")
+	return get_workspace_sampling(style)
+
+
+@frappe.whitelist()
 def drop_stage(stage):
 	if not frappe.has_permission("Sample Stage", "write"):
 		frappe.throw(_("Not permitted to update this stage"))
@@ -474,6 +534,18 @@ def get_workspace_sampling(style):
 		observations_by_version.setdefault(o.sample_version, []).append(o)
 	for v in versions:
 		v["observations"] = observations_by_version.get(v.name, [])
+
+	photos = frappe.get_all(
+		"Sample Photo", filters={"sample_version": ["in", version_names or [""]]},
+		fields=["name", "sample_version", "image", "caption", "capture_source",
+				"captured_by", "captured_on", "is_primary"],
+		order_by="sample_version asc, is_primary desc, captured_on asc",
+	)
+	photos_by_version = {}
+	for p in photos:
+		photos_by_version.setdefault(p.sample_version, []).append(p)
+	for v in versions:
+		v["photos"] = photos_by_version.get(v.name, [])
 
 	versions_by_stage = {}
 	for v in versions:
