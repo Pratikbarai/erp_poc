@@ -525,9 +525,10 @@ class StyleWorkspace {
 		let matrix = `<div class="sw-empty">Add colours and sizes on the full form, then come back here.</div>`;
 		if (colours.length && sizes.length) {
 			matrix = `<table class="sw-matrix"><thead><tr><th>Colour</th>${sizes.map(sz => `<th>${frappe.utils.escape_html(sz.size_code || sz.size)}</th>`).join("")}</tr></thead><tbody>`;
-			colours.forEach(c => {
+			colours.forEach((c, i) => {
 				const ccode = c.colour_code || c.colour_name;
-				matrix += `<tr><td class="sw-rowh">${c.swatch ? `<span class="sw-swatch" style="background:${c.swatch}"></span> ` : ""}${frappe.utils.escape_html(c.colour_name)}</td>`;
+				const approvedPill = `<span class="sw-pill sw-colour-approve ${c.approved_for_production ? "sw-pill-ok" : "sw-pill-warn"}" data-idx="${i}" title="Click to toggle - required for this colour to appear in the matrix and count toward BOM/SKU generation">${c.approved_for_production ? "Approved" : "Not approved ⚠"}</span>`;
+				matrix += `<tr><td class="sw-rowh">${c.swatch ? `<span class="sw-swatch" style="background:${c.swatch}"></span> ` : ""}${frappe.utils.escape_html(c.colour_name)} ${approvedPill}</td>`;
 				sizes.forEach(sz => {
 						const scode = sz.size_code || ((s.matrix_items || []).find(m => m.size === sz.size)?.size_code) || sz.size;
 					const row = (s.matrix_items || []).find(m => m.colour_code === ccode && m.size_code === scode);

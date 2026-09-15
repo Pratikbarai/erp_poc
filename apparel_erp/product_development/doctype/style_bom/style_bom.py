@@ -1,5 +1,6 @@
 import frappe
 from frappe.model.document import Document
+from frappe.model.naming import append_number_if_name_exists
 from frappe import _
 from frappe.utils import flt
 
@@ -423,10 +424,13 @@ def set_bom_generation_mode(style_bom_name, mode):
 
 
 def _generate_or_branch(style_doc, sb, colour_code, size_code, build_fn):
-	"""Regeneration branching per spec 7.2: don't blindly regenerate. Branch
-	on the downstream state of any BOM already generated from this Style BOM
-	for this colourway (size_code=None, Per Colourway mode) or this exact
-	colourway x size cell (Per SKU mode)."""
+	"""Spec: a production BOM is generated once. If one already exists
+	(any non-cancelled docstatus) for this colourway (size_code=None, Per
+	Colourway mode) or this exact colourway x size cell (Per SKU mode),
+	further generation runs are a no-op that just returns it untouched -
+	no silent cancel-and-rebuild, regardless of downstream Work Order
+	state. To replace a generated BOM, cancel it explicitly first (from
+	its own form) so the next run finds nothing here and builds fresh."""
 	existing_bom_name = frappe.db.get_value(
 		"BOM",
 		{
@@ -438,33 +442,11 @@ def _generate_or_branch(style_doc, sb, colour_code, size_code, build_fn):
 		"name",
 		order_by="creation desc",
 	)
-
 	if existing_bom_name:
-		wo = frappe.db.get_value(
-			"Work Order", {"bom_no": existing_bom_name, "docstatus": 1},
-			["name", "status", "produced_qty"], as_dict=True, order_by="creation desc",
-		)
-		
-		if wo and wo.status in ("In Process", "Completed"):
-			_write_variance_register(style_doc, sb, colour_code, existing_bom_name,
-				reason=_("Work Order {0} is {1} - existing BOM left untouched.").format(wo.name, wo.status),
-				size_code=size_code)
-			return existing_bom_name
-		if wo and (wo.produced_qty or 0) == 0:
-			# Submitted WO, nothing produced yet: safe to cancel WO + BOM and regenerate.
-			wo_doc = frappe.get_doc("Work Order", wo.name)
-			wo_doc.flags.ignore_permissions = True
-			wo_doc.cancel()
-			old_bom = frappe.get_doc("BOM", existing_bom_name)
-			if old_bom.docstatus == 1:
-				old_bom.flags.ignore_permissions = True
-				old_bom.cancel()
-		elif not wo:
-			# BOM exists, no Work Order at all: cancel and regenerate silently.
-			old_bom = frappe.get_doc("BOM", existing_bom_name)
-			if old_bom.docstatus == 1:
-				old_bom.flags.ignore_permissions = True
-				old_bom.cancel()
+		_write_variance_register(style_doc, sb, colour_code, existing_bom_name,
+			reason=_("Already generated - production BOMs are generated once. Cancel {0} first if it needs to be replaced.").format(existing_bom_name),
+			size_code=size_code)
+		return existing_bom_name
 
 	bom_name = build_fn()
 	write_generation_log(sb, colour_code, bom_name, size_code=size_code)
@@ -518,6 +500,26 @@ def _get_or_create_colour_carrier_item(style_doc, colour_code):
 	return item.item_code
 
 
+def _production_bom_name(style_doc, colour_code, size_code=None):
+	"""Generated production BOMs get a readable, on-brand name instead of
+	ERPNext's default BOM-<item>-### - includes 'Production' so these are
+	unmistakable in lists/search next to the Style BOM (the editable
+	recipe) and any other BOMs in the system. append_number_if_name_exists
+	disambiguates the rare case where the clean name is already taken (e.g.
+	a same-version regeneration after the prior one was cancelled)."""
+	base = f"Production-{style_doc.style_no}-{colour_code}"
+	if size_code:
+		base += f"-{size_code}"
+	return append_number_if_name_exists("BOM", base)
+
+
+def _rename_to_production_name(bom, new_name):
+	if new_name == bom.name:
+		return bom
+	frappe.rename_doc("BOM", bom.name, new_name, force=True, ignore_permissions=True)
+	return frappe.get_doc("BOM", new_name)
+
+
 def _build_colour_bom(style_doc, sb, cw, colour_code, ratio):
 	carrier_item = _get_or_create_colour_carrier_item(style_doc, colour_code)
 
@@ -560,6 +562,7 @@ def _build_colour_bom(style_doc, sb, cw, colour_code, ratio):
 	bom.custom_style_bom_version = sb.version
 	bom.custom_colourway = colour_code
 	bom.insert(ignore_permissions=True)
+	bom = _rename_to_production_name(bom, _production_bom_name(style_doc, colour_code))
 	bom.submit()
 	return bom.name
 
@@ -620,6 +623,7 @@ def _build_sku_bom(style_doc, sb, cw, colour_code, size_code, sku_item):
 	bom.custom_colourway = colour_code
 	bom.custom_size = size_code
 	bom.insert(ignore_permissions=True)
+	bom = _rename_to_production_name(bom, _production_bom_name(style_doc, colour_code, size_code))
 	bom.submit()
 	return bom.name
 
