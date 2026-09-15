@@ -491,7 +491,7 @@ def _production_bom_name(style_doc, colour_code, size_code=None):
 def _rename_to_production_name(bom, new_name):
 	if new_name == bom.name:
 		return bom
-	frappe.rename_doc("BOM", bom.name, new_name, force=True, ignore_permissions=True)
+	frappe.rename_doc("BOM", bom.name, new_name, force=True)
 	return frappe.get_doc("BOM", new_name)
 
 
