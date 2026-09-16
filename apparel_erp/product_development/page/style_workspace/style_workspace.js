@@ -1846,8 +1846,8 @@ $panels.html(`
 		if (selectedStage && selectedVersion) {
 			const v = selectedVersion;
 			const obsRows = (v.observations || []).length
-				? v.observations.map(o => `<div class="sw-samp-obs sw-samp-obs-${(o.status || "").toLowerCase().replace(/\s+/g, "-")}">
-						<span class="sw-samp-obs-seq">#${o.seq}</span>
+				? v.observations.map(o => `<div class="sw-samp-obs sw-samp-obs-${(o.status || "").toLowerCase().replace(/\s+/g, "-")} ${o.name === this.sampling_selected_observation ? "sel" : ""}" data-obs="${o.name}" data-photo="${o.photo || ""}">
+						<span class="sw-samp-obs-seq">${o.photo ? "📍" : "#"}${o.seq}</span>
 						<span class="sw-pill sw-pill-mut">${frappe.utils.escape_html(o.category || "—")}</span>
 						<span class="sw-samp-obs-text">${frappe.utils.escape_html(o.observation_text || "")}</span>
 						<span class="sw-samp-obs-status">${o.status}</span>
@@ -1855,8 +1855,9 @@ $panels.html(`
 				: `<div class="sw-empty">No observations on this version.</div>`;
 
 			const canEdit = ["In Progress", "Submitted"].includes(v.status);
+			const activePhotoName = this.sampling_active_photo;
 			const photoStrip = (v.photos || []).map(p => `
-				<div class="sw-samp-photo" data-photo="${p.name}">
+				<div class="sw-samp-photo ${p.name === activePhotoName ? "sel" : ""}" data-photo="${p.name}" data-select-photo="${p.name}" title="Click to view &amp; annotate">
 					<img src="${frappe.utils.escape_html(p.image)}" alt="${frappe.utils.escape_html(p.caption || "")}">
 					${p.is_primary ? `<span class="sw-samp-photo-primary" title="Primary photo">★</span>` : ""}
 					${canEdit ? `<span class="sw-samp-photo-del" data-photo="${p.name}" title="Delete">&times;</span>` : ""}
@@ -1870,6 +1871,23 @@ $panels.html(`
 					<input type="file" accept="image/*" id="swUploadPhoto" hidden>
 					<span>⬆<br>Upload</span>
 				</label>` : "";
+
+			const activePhoto = (v.photos || []).find(p => p.name === activePhotoName);
+			const pinsForPhoto = activePhoto ? (v.observations || []).filter(o => o.photo === activePhotoName) : [];
+			const annotatorHtml = activePhoto ? `
+				<div class="sw-samp-annotator">
+					<div class="sw-samp-annotator-bar">
+						<span class="sw-muted-sm">${frappe.utils.escape_html(activePhoto.caption || "Photo")} — click a pin to highlight its observation${canEdit ? ", or Add pin to place a new one" : ""}</span>
+						<div class="right">
+							${canEdit ? `<button class="sw-btn sw-btn-sm" id="swAddPinMode">+ Add pin</button>` : ""}
+							<button class="sw-btn sw-btn-sm" id="swCloseAnnotator">Close</button>
+						</div>
+					</div>
+					<div class="sw-samp-annotator-img sw-flat-wrap" id="swAnnotatorImg" data-photo="${activePhoto.name}">
+						<img src="${frappe.utils.escape_html(activePhoto.image)}" draggable="false">
+						${pinsForPhoto.map(o => `<button type="button" class="sw-pin ${o.name === this.sampling_selected_observation ? "on" : ""}" style="left:${o.pos_x}%;top:${o.pos_y}%" data-obs="${o.name}" title="${frappe.utils.escape_html(o.observation_text || "")}">${o.seq}</button>`).join("")}
+					</div>
+				</div>` : "";
 
 			const actions = [];
 			if (v.status === "In Progress") actions.push(`<button class="sw-btn sw-btn-sm" id="swMarkSubmitted">Mark submitted</button>`);
@@ -1894,6 +1912,7 @@ $panels.html(`
 						<div class="sw-attr"><span>Sample cost</span><span>${v.sample_cost != null ? v.sample_cost : "—"}${v.is_recoverable ? " (recoverable)" : ""}</span></div>
 						<h3 style="margin:14px 0 6px;font-size:13px">Photos</h3>
 						<div class="sw-samp-photo-strip">${photoStrip}${captureTile}</div>
+						${annotatorHtml}
 						<h3 style="margin:14px 0 6px;font-size:13px">Observations</h3>
 						<div class="sw-samp-obs-list">${obsRows}</div>
 						<div class="sw-samp-actions" style="margin-top:12px">${actions.join("")}</div>
@@ -1922,6 +1941,9 @@ $panels.html(`
 		$panels.on("click", ".sw-samp-version", (e) => {
 			this.sampling_selected_stage = $(e.currentTarget).data("stage");
 			this.sampling_selected_version = $(e.currentTarget).data("version");
+			this.sampling_active_photo = null;
+			this.sampling_selected_observation = null;
+			this.sampling_pin_mode = false;
 			this.paint_sampling_tab($panels);
 		});
 		$panels.on("click", "#swAddSampleStage", () => this.prompt_add_sample_stage($panels));
@@ -1972,11 +1994,86 @@ $panels.html(`
 					callback: (r) => {
 						frappe.dom.unfreeze();
 						this.workspace_sampling = r.message;
+						if (this.sampling_active_photo === photo) this.sampling_active_photo = null;
 						this.paint_sampling_tab($panels);
 					},
 					error: () => frappe.dom.unfreeze()
 				});
 			});
+		});
+		$panels.on("click", "[data-select-photo]", (e) => {
+			if ($(e.target).hasClass("sw-samp-photo-del")) return;
+			const name = $(e.currentTarget).data("select-photo");
+			this.sampling_active_photo = (this.sampling_active_photo === name) ? null : name;
+			this.sampling_selected_observation = null;
+			this.sampling_pin_mode = false;
+			this.paint_sampling_tab($panels);
+		});
+		$panels.on("click", "#swCloseAnnotator", () => {
+			this.sampling_active_photo = null;
+			this.sampling_selected_observation = null;
+			this.sampling_pin_mode = false;
+			this.paint_sampling_tab($panels);
+		});
+		$panels.on("click", "#swAddPinMode", (e) => {
+			this.sampling_pin_mode = !this.sampling_pin_mode;
+			$(e.currentTarget).text(this.sampling_pin_mode ? "Click the photo…" : "+ Add pin");
+			$panels.find("#swAnnotatorImg").toggleClass("adding", this.sampling_pin_mode);
+		});
+		// Click on the enlarged photo (while in pin-add mode) places a new
+		// pin at that percentage position and opens the observation entry -
+		// the same click-to-place pattern the Tech Pack sketch callouts use
+		// (spec 7.2: reuse the pinned-image behaviour, don't fork it).
+		$panels.on("click", "#swAnnotatorImg", (e) => {
+			if (!this.sampling_pin_mode || $(e.target).hasClass("sw-pin")) return;
+			const $wrap = $(e.currentTarget);
+			const rect = $wrap[0].getBoundingClientRect();
+			const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+			const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+			const photo = $wrap.data("photo");
+			const d = new frappe.ui.Dialog({
+				title: "Add pinned observation",
+				fields: [
+					{ fieldname: "category", label: "Category", fieldtype: "Link", options: "Observation Category" },
+					{ fieldname: "observation_text", label: "Observation", fieldtype: "Small Text", reqd: 1 }
+				],
+				primary_action_label: "Add",
+				primary_action: (values) => {
+					frappe.dom.freeze("Adding…");
+					frappe.call({
+						method: "apparel_erp.product_development.sampling.add_observation",
+						args: {
+							version: this.sampling_selected_version, observation_text: values.observation_text,
+							category: values.category, photo, pos_x: x.toFixed(2), pos_y: y.toFixed(2)
+						},
+						callback: (r) => {
+							frappe.dom.unfreeze();
+							d.hide();
+							this.workspace_sampling = r.message;
+							this.sampling_pin_mode = false;
+							this.paint_sampling_tab($panels);
+						},
+						error: () => frappe.dom.unfreeze()
+					});
+				}
+			});
+			d.show();
+		});
+		// Click a pin <-> highlight its observation row, and vice versa -
+		// clicking an observation with a photo jumps the annotator to it.
+		$panels.on("click", ".sw-pin", (e) => {
+			e.stopPropagation();
+			const obs = $(e.currentTarget).data("obs");
+			this.sampling_selected_observation = (this.sampling_selected_observation === obs) ? null : obs;
+			this.paint_sampling_tab($panels);
+		});
+		$panels.on("click", ".sw-samp-obs", (e) => {
+			const photo = $(e.currentTarget).data("photo");
+			const obs = $(e.currentTarget).data("obs");
+			if (!photo) return;
+			this.sampling_active_photo = photo;
+			this.sampling_selected_observation = (this.sampling_selected_observation === obs) ? null : obs;
+			this.paint_sampling_tab($panels);
 		});
 	}
 
@@ -3140,6 +3237,11 @@ const SW_CSS = `
 .sw-samp-photo-add:hover{border-color:var(--sw-accent);color:var(--sw-accent)}
 .sw-samp-photo-primary{position:absolute;top:2px;left:2px;font-size:11px;color:#F5A623;text-shadow:0 0 2px #000}
 .sw-samp-photo-del{position:absolute;top:1px;right:3px;color:#fff;background:rgba(0,0,0,.45);width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;line-height:1}
+.sw-samp-photo.sel{outline:2px solid var(--sw-accent);outline-offset:1px}
+.sw-samp-annotator{margin:10px 0 16px;border:1px solid var(--sw-line);border-radius:var(--sw-r-sm);padding:8px}
+.sw-samp-annotator-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.sw-samp-annotator-img{max-width:420px}
+.sw-samp-obs.sel{background:var(--sw-accent-10,#EEF4FF);border-radius:6px}
 .sw-samp-obs-list{display:flex;flex-direction:column;gap:6px}
 .sw-samp-obs{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:5px 0;border-bottom:1px dashed var(--sw-line)}
 .sw-samp-obs:last-child{border:none}

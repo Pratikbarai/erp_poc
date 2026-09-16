@@ -16,7 +16,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, now_datetime, today
+from frappe.utils import add_days, flt, now_datetime, today
 
 
 # ---------------------------------------------------------------------------
@@ -371,7 +371,7 @@ def cancel_version(version):
 
 
 @frappe.whitelist()
-def add_observation(version, observation_text, category=None):
+def add_observation(version, observation_text, category=None, photo=None, pos_x=None, pos_y=None):
 	if not observation_text or not observation_text.strip():
 		frappe.throw(_("Observation text is required."))
 	if not frappe.has_permission("Sample Observation", "create"):
@@ -379,6 +379,8 @@ def add_observation(version, observation_text, category=None):
 	doc = frappe.get_doc("Sample Version", version)
 	if doc.status not in ("In Progress", "Submitted"):
 		frappe.throw(_("Observations can only be added while a version is In Progress or Submitted."))
+	if photo and frappe.db.get_value("Sample Photo", photo, "sample_version") != version:
+		frappe.throw(_("That photo does not belong to this version."))
 
 	frappe.get_doc({
 		"doctype": "Sample Observation",
@@ -387,6 +389,9 @@ def add_observation(version, observation_text, category=None):
 		"observation_text": observation_text.strip(),
 		"is_free_text": 1,
 		"status": "Open",
+		"photo": photo,
+		"pos_x": flt(pos_x) if photo and pos_x is not None else None,
+		"pos_y": flt(pos_y) if photo and pos_y is not None else None,
 	}).insert(ignore_permissions=True)
 	frappe.db.commit()
 
@@ -525,7 +530,7 @@ def get_workspace_sampling(style):
 	observations = frappe.get_all(
 		"Sample Observation", filters={"sample_version": ["in", version_names or [""]]},
 		fields=["name", "sample_version", "seq", "category", "observation_text", "is_free_text",
-				"status", "carried_from"],
+				"status", "carried_from", "photo", "pos_x", "pos_y"],
 		order_by="sample_version asc, seq asc",
 	)
 

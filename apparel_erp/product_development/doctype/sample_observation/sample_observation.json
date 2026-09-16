@@ -28,7 +28,10 @@
       "label": "Status",
       "in_list_view": 1
     },
-    {"fieldname": "carried_from", "fieldtype": "Link", "options": "Sample Observation", "label": "Carried From", "read_only": 1, "description": "Set by carry-forward when this observation is a copy of an earlier version's unresolved one."}
+    {"fieldname": "carried_from", "fieldtype": "Link", "options": "Sample Observation", "label": "Carried From", "read_only": 1, "description": "Set by carry-forward when this observation is a copy of an earlier version's unresolved one."},
+    {"fieldname": "photo", "fieldtype": "Link", "options": "Sample Photo", "label": "Photo", "description": "Null for an unpinned observation not tied to a specific photo."},
+    {"fieldname": "pos_x", "fieldtype": "Float", "label": "Pin X (%)", "precision": "2", "description": "Percentage of the photo's rendered width, 0-100. Percent, never pixels - a thumbnail and a full-size render would otherwise disagree."},
+    {"fieldname": "pos_y", "fieldtype": "Float", "label": "Pin Y (%)", "precision": "2", "description": "Percentage of the photo's rendered height, 0-100."}
   ],
   "permissions": [
     {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
