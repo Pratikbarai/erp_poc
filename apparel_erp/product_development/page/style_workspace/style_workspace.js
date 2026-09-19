@@ -2729,6 +2729,7 @@ $panels.html(`
 						${callouts.length ? callouts.map(c => `
 							<div class="sw-callout-row" data-n="${c.sequence}">
 								<span class="sw-n">${c.sequence}</span><span>${frappe.utils.escape_html(c.text)}</span>
+								<span class="sw-pill sw-pill-mut">${c.reference_image ? frappe.utils.escape_html((refImages.find(ri => ri.name === c.reference_image) || {}).label || "Reference image") : (c.sketch || "Front")}</span>
 								<button class="sw-btn sw-btn-sm sw-edit-callout" data-name="${frappe.utils.escape_html(c.name || "")}">Edit</button>
 								<button class="sw-btn sw-btn-sm sw-delete-callout" data-name="${frappe.utils.escape_html(c.name || "")}" title="Delete callout">Delete</button>
 							</div>`).join("") : `<div class="sw-empty" style="padding:8px">No callouts yet — add one from the sketch.</div>`}
@@ -2761,10 +2762,37 @@ $panels.html(`
 			</div>
 			<div class="sw-grid2">
 				<div class="sw-card">
-					<div class="sw-card-h"><h2>Reference images</h2><div class="sw-right"><button class="sw-btn sw-btn-sm" id="swAddReferenceImage">+ Add image</button></div></div>
+					<div class="sw-card-h"><h2>Reference images</h2><div class="sw-right">
+						<label class="sw-btn sw-btn-sm" title="Take a photo with your camera">📷 Take photo<input type="file" accept="image/*" capture="environment" id="swCaptureRefImage" hidden></label>
+						<button class="sw-btn sw-btn-sm" id="swAddReferenceImage">+ Upload</button>
+					</div></div>
 					<div class="sw-card-b" style="display:flex;gap:8px;flex-wrap:wrap">
-						${refImages.length ? refImages.map(ri => `<img src="${ri.image}" title="${frappe.utils.escape_html(ri.label || "")}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--sw-line)">`).join("") : `<div class="sw-empty">No reference images.</div>`}
+						${refImages.length ? refImages.map(ri => {
+							const n = callouts.filter(c => c.reference_image === ri.name).length;
+							return `<div class="sw-refimg-thumb ${ri.name === this.tp_active_refimg ? "sel" : ""}" data-select-refimg="${ri.name || ""}" title="${frappe.utils.escape_html(ri.label || "")} - click to view &amp; annotate">
+								<img src="${ri.image}">
+								${n ? `<span class="sw-refimg-count">${n}</span>` : ""}
+							</div>`;
+						}).join("") : `<div class="sw-empty">No reference images.</div>`}
 					</div>
+					${(() => {
+						const activeRi = refImages.find(ri => ri.name === this.tp_active_refimg);
+						if (!activeRi) return "";
+						const riCallouts = callouts.filter(c => c.reference_image === activeRi.name);
+						return `<div class="sw-card-b" style="border-top:1px solid var(--sw-line)">
+							<div class="sw-samp-annotator-bar">
+								<span class="sw-muted-sm">${frappe.utils.escape_html(activeRi.label || "Reference image")}</span>
+								<div class="right">
+									<button class="sw-btn sw-btn-sm" id="swAddRefImgCallout">+ Add callout</button>
+									<button class="sw-btn sw-btn-sm" id="swCloseRefImgAnnotator">Close</button>
+								</div>
+							</div>
+							<div class="sw-flat-wrap sw-samp-annotator-img" id="swRefImgWrap" data-refimg="${activeRi.name}">
+								<img src="${activeRi.image}" draggable="false">
+								${riCallouts.map(c => `<button class="sw-pin" style="left:${c.x}%;top:${c.y}%" data-n="${c.sequence}">${c.sequence}</button>`).join("")}
+							</div>
+						</div>`;
+					})()}
 				</div>
 				<div class="sw-card">
 					<div class="sw-card-h"><h2>Attachments</h2></div>
@@ -2809,6 +2837,44 @@ $panels.html(`
 			window.open(url, "_blank");
 		});
 		$panels.find("#swAddReferenceImage").on("click", () => this.add_reference_image());
+		$panels.find("#swCaptureRefImage").on("change", (e) => this.capture_reference_image(e, $panels));
+		$panels.find("[data-select-refimg]").on("click", (e) => {
+			const name = $(e.currentTarget).data("select-refimg");
+			this.tp_active_refimg = (this.tp_active_refimg === name) ? null : name;
+			this.tpl_techpack($panels, this.tp, this.style);
+		});
+		$panels.find("#swCloseRefImgAnnotator").on("click", () => {
+			this.tp_active_refimg = null;
+			this.tpl_techpack($panels, this.tp, this.style);
+		});
+		(() => {
+			const $wrap = $panels.find("#swRefImgWrap");
+			const refImgName = $wrap.data("refimg");
+			$panels.find("#swAddRefImgCallout").on("click", (e) => {
+				if (!$wrap.length) return;
+				const adding = $wrap.toggleClass("adding").hasClass("adding");
+				$(e.currentTarget).text(adding ? "Click the photo…" : "+ Add callout");
+			});
+			$wrap.on("click", (e) => {
+				if (!$wrap.hasClass("adding") || $(e.target).hasClass("sw-pin")) return;
+				const rect = $wrap[0].getBoundingClientRect();
+				const x = ((e.clientX - rect.left) / rect.width) * 100;
+				const y = ((e.clientY - rect.top) / rect.height) * 100;
+				frappe.prompt(
+					[{ fieldname: "text", label: "Construction note", fieldtype: "Data", reqd: 1 }],
+					(values) => {
+						this.tp.callouts = this.tp.callouts || [];
+						const next_n = this.tp.callouts.reduce((max, row) => Math.max(max, row.sequence || 0), 0) + 1;
+						this.tp.callouts.push({ sequence: next_n, text: values.text, reference_image: refImgName, x: x.toFixed(2), y: y.toFixed(2) });
+						this.save_techpack_and_refresh();
+					},
+					"Add callout",
+					"Add"
+				);
+				$wrap.removeClass("adding");
+				$panels.find("#swAddRefImgCallout").text("+ Add callout");
+			});
+		})();
 
 		[
 			{ wrapper: "#swFrontWrap", button: "#swAddCalloutFront", sketch: "Front" },
@@ -2895,13 +2961,51 @@ $panels.html(`
 					docname: this.tp.name,
 					on_success: (file) => {
 						this.tp.reference_images = this.tp.reference_images || [];
-						this.tp.reference_images.push({ label: values.label, image: file.file_url });
+						this.tp.reference_images.push({ label: values.label, image: file.file_url, capture_source: "Desktop" });
 						this.save_techpack_and_refresh();
 					}
 				});
 			},
 			"Add reference image",
 			"Upload"
+		);
+	}
+
+	capture_reference_image(e, $panels) {
+		const file = e.target.files && e.target.files[0];
+		e.target.value = "";
+		if (!file) return;
+		frappe.prompt(
+			[{ fieldname: "label", label: "Image label", fieldtype: "Data", reqd: 1, default: "Photo" }],
+			(values) => {
+				const formData = new FormData();
+				formData.append("file", file);
+				formData.append("is_private", 1);
+				formData.append("doctype", "Design Tech Pack");
+				formData.append("docname", this.tp.name);
+				frappe.dom.freeze("Uploading photo…");
+				fetch("/api/method/upload_file", {
+					method: "POST",
+					headers: { "X-Frappe-CSRF-Token": frappe.csrf_token },
+					body: formData
+				})
+					.then(r => r.json())
+					.then(data => {
+						frappe.dom.unfreeze();
+						const file_url = data.message && data.message.file_url;
+						if (!file_url) throw new Error("Upload did not return a file URL");
+						this.tp.reference_images = this.tp.reference_images || [];
+						this.tp.reference_images.push({ label: values.label, image: file_url, capture_source: "Mobile" });
+						this.save_techpack_and_refresh();
+					})
+					.catch((err) => {
+						frappe.dom.unfreeze();
+						console.error("Photo upload failed", err);
+						frappe.msgprint({ title: __("Upload failed"), indicator: "red", message: __("Could not upload the photo. Please try again.") });
+					});
+			},
+			"Take photo",
+			"Save"
 		);
 	}
 
@@ -3298,6 +3402,10 @@ const SW_CSS = `
 .sw-picker-row:hover{border-color:var(--sw-accent)}
 .sw-loading{padding:30px;color:var(--sw-ink-3);font-size:13px}
 .sw-flat-wrap{position:relative;background:#F8FAFC;border:1px solid var(--sw-line);border-radius:var(--sw-r);overflow:hidden}
+.sw-refimg-thumb{position:relative;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--sw-line);cursor:pointer}
+.sw-refimg-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.sw-refimg-thumb.sel{outline:2px solid var(--sw-accent);outline-offset:1px}
+.sw-refimg-count{position:absolute;top:2px;right:2px;background:var(--sw-accent);color:#fff;font-size:10px;font-weight:600;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;justify-content:center;padding:0 3px}
 .sw-flat-wrap img{width:100%;display:block;user-select:none}
 .sw-flat-wrap.adding{cursor:crosshair}
 .sw-pin{position:absolute;width:22px;height:22px;border-radius:50%;background:#0D9488;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:600;transform:translate(-50%,-50%);cursor:pointer;border:2px solid #fff}

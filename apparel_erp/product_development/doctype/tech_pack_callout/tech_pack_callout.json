@@ -8,7 +8,8 @@
  "fields": [
   {"fieldname": "sequence", "fieldtype": "Int", "label": "#", "in_list_view": 1, "description": "Pin number shown on the sketch"},
   {"fieldname": "text", "fieldtype": "Data", "label": "Construction Note", "reqd": 1, "in_list_view": 1},
-  {"fieldname": "sketch", "fieldtype": "Select", "label": "Sketch", "options": "Front\nBack", "default": "Front", "in_list_view": 1},
+  {"fieldname": "sketch", "fieldtype": "Select", "label": "Sketch", "options": "Front\nBack", "default": "Front", "in_list_view": 1, "description": "Only meaningful when reference_image is blank."},
+  {"fieldname": "reference_image", "fieldtype": "Data", "label": "Reference Image Row", "description": "Row name of the Tech Pack Reference Image this pin belongs to. When set, this overrides sketch - the pin is on that reference photo instead of the Front/Back sketch."},
   {"fieldname": "x", "fieldtype": "Float", "label": "X (% from left)", "precision": "2", "in_list_view": 1},
   {"fieldname": "y", "fieldtype": "Float", "label": "Y (% from top)", "precision": "2", "in_list_view": 1}
  ],
