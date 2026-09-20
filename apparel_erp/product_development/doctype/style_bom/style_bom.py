@@ -510,7 +510,7 @@ def _rename_to_production_name(bom, new_name):
 	# rights on ERPNext's core BOM doctype) - the rename step was the one
 	# place that got missed, causing "You need write permission on BOM
 	# ... to rename" even though the BOM had just been inserted fine.
-	frappe.rename_doc("BOM", bom.name, new_name, force=True, ignore_permissions=True)
+	frappe.rename_doc("BOM", bom.name, new_name, force=True)
 	return frappe.get_doc("BOM", new_name)
 
 
