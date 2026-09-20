@@ -345,6 +345,7 @@ class StyleWorkspace {
 	}
 
 	bind_info($panels) {
+		$panels.off();
 		$panels.find("#swBomStage").on("change", (e) => {
 			const $select = $(e.currentTarget);
 			const stage = $select.val();
@@ -587,6 +588,7 @@ class StyleWorkspace {
 
 	bind_colours() {
 		const $panels = $(this.wrapper).find("#swPanels");
+		$panels.off();
 		this.bind_generate_bom_button($panels);
 		$panels.find(".sw-sku[data-item]").on("click", (e) => {
 			e.preventDefault();
@@ -892,6 +894,7 @@ class StyleWorkspace {
 	}
 
 	bind_order_tab($panels) {
+		$panels.off();
 		$panels.find("#swOpenOrderForm").on("click", () => {
 			if (this.workspace_order && this.workspace_order.name) {
 				frappe.set_route("Form", "Apparel Order", this.workspace_order.name);
@@ -1111,6 +1114,7 @@ class StyleWorkspace {
 	}
 
 	bind_bom_tab($panels) {
+		$panels.off();
 		$panels.find("#swOpenBomForm").on("click", () => {
 			if (this.workspace_bom && this.workspace_bom.name) {
 				frappe.set_route("Form", "Style BOM", this.workspace_bom.name);
@@ -1449,6 +1453,7 @@ $panels.html(`
 	}
 
 	bind_costing_tab($panels) {
+		$panels.off();
 		this.bind_generate_bom_button($panels);
 		// Extra commercial line items: "+ Add item" appends a blank editable
 		// row client-side only (no server round trip needed just to add a
@@ -1722,6 +1727,7 @@ $panels.html(`
 	}
 
 	bind_prodbom_tab($panels) {
+		$panels.off();
 		$panels.find("#swSetProdBomMode").on("click", () => {
 			const sb = this.workspace_prodbom.style_bom;
 			const d = new frappe.ui.Dialog({
@@ -1933,6 +1939,7 @@ $panels.html(`
 	}
 
 	bind_sampling_tab($panels) {
+		$panels.off();
 		$panels.on("click", "[data-stage-toggle]", (e) => {
 			const stage = $(e.currentTarget).data("stage-toggle");
 			this.sampling_selected_stage = (this.sampling_selected_stage === stage) ? null : stage;
@@ -2447,6 +2454,7 @@ $panels.html(`
 	}
 
 	bind_tna_tab($panels) {
+		$panels.off();
 		$panels.find("[data-tna-view]").on("click", (e) => {
 			this.tna_view = $(e.currentTarget).data("tna-view");
 			this.paint_tna_tab($panels);
@@ -2803,6 +2811,7 @@ $panels.html(`
 			</div>
 		`);
 		this.tp = tp;
+		$panels.off();
 		this.bind_generate_bom_button($panels);
 		$panels.find(".sw-save-bom-rates").on("click", () => this.save_bom_rates_from_techpack($panels));
 		$panels.find("#swOpenTPForm").on("click", () => frappe.set_route("Form", "Design Tech Pack", tp.name));
