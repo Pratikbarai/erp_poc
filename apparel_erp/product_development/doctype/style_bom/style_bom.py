@@ -523,13 +523,22 @@ def _rename_to_production_name(bom, new_name):
 			frappe.delete_doc("BOM", new_name, force=True, ignore_permissions=True)
 		else:
 			frappe.delete_doc("BOM", bom.name, force=True, ignore_permissions=True)
-			return frappe.get_doc("BOM", new_name)
+			existing_bom = frappe.get_doc("BOM", new_name)
+			existing_bom.flags.ignore_permissions = True
+			return existing_bom
 
 	_rename_doc_internal(
 		"BOM", bom.name, new_name, force=True, ignore_permissions=True,
 		show_alert=False, rebuild_search=False,
 	)
-	return frappe.get_doc("BOM", new_name)
+	# frappe.get_doc fetches a brand-new Document object, which does not carry
+	# over bom.flags.ignore_permissions from the original insert() call. If a
+	# caller submits this returned doc, .submit() has no ignore_permissions
+	# kwarg of its own - it only respects the flag - so without this, submit
+	# fails with "No permission for BOM" even though insert succeeded fine.
+	new_bom = frappe.get_doc("BOM", new_name)
+	new_bom.flags.ignore_permissions = True
+	return new_bom
 
 
 def _build_colour_bom(style_doc, sb, cw, colour_code, ratio):
