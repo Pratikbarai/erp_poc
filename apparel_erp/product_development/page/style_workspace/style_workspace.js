@@ -1698,11 +1698,11 @@ $panels.html(`
 				<tr>
 					<td>${frappe.utils.escape_html(bom.custom_colourway || "—")}</td>
 					<td>${frappe.utils.escape_html(bom.custom_size || "—")}</td>
-					<td><a href="/app/bom/${encodeURIComponent(bom.name)}" target="_blank">${frappe.utils.escape_html(bom.item || "")}</a><div class="sw-muted-sm">${frappe.utils.escape_html(bom.item_name || "")}</div></td>
+					<td><a href="#" class="sw-prodbom-open" data-bom="${frappe.utils.escape_html(bom.name)}">${frappe.utils.escape_html(bom.item || "")}</a><div class="sw-muted-sm">${frappe.utils.escape_html(bom.item_name || "")}</div></td>
 					<td>${statusPill(bom)}</td>
 					<td class="num">${bom.total_cost != null ? frappe.format(bom.total_cost, { fieldtype: "Currency" }) : "—"}</td>
 					<td>${frappe.datetime.str_to_user(bom.creation)}</td>
-					<td><a href="/app/bom/${encodeURIComponent(bom.name)}" target="_blank">Open →</a></td>
+					<td><a href="#" class="sw-prodbom-open" data-bom="${frappe.utils.escape_html(bom.name)}">Open →</a></td>
 				</tr>`).join("")
 			: `<tr><td colspan="7" class="sw-empty">No production BOMs generated yet.</td></tr>`;
 
@@ -1728,6 +1728,26 @@ $panels.html(`
 
 	bind_prodbom_tab($panels) {
 		$panels.off();
+		// Real BOM document navigation, not a hardcoded URL - frappe.set_route
+		// resolves to whatever this site's actual desk path is (/app, /desk,
+		// whatever), and checking existence first means a BOM that's since
+		// been renamed/cancelled/deleted shows a clear message instead of
+		// Frappe's generic "Page bom not found" 404.
+		$panels.on("click", ".sw-prodbom-open", (e) => {
+			e.preventDefault();
+			const bom_name = $(e.currentTarget).data("bom");
+			if (!bom_name) return;
+			frappe.db.exists("BOM", bom_name).then((exists) => {
+				if (exists) {
+					frappe.set_route("Form", "BOM", bom_name);
+				} else {
+					frappe.show_alert({
+						message: __("{0} no longer exists - it may have been renamed, cancelled or deleted since this list was generated. Refresh the tab.", [bom_name]),
+						indicator: "red"
+					});
+				}
+			});
+		});
 		$panels.find("#swSetProdBomMode").on("click", () => {
 			const sb = this.workspace_prodbom.style_bom;
 			const d = new frappe.ui.Dialog({
