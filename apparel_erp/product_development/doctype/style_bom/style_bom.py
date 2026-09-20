@@ -459,9 +459,20 @@ def _get_or_create_colour_carrier_item(style_doc, colour_code):
 	BOM in this model is shared across every size of that colour, it needs a
 	dedicated non-stock carrier Item to attach to - it is not itself a
 	sellable SKU. (Real sellable SKUs are the Style Matrix Item Items, one
-	per colour x size, generated separately for ordering/stock.)"""
+	per colour x size, generated separately for ordering/stock.)
+
+	Not sellable/purchasable is expressed via is_sales_item/is_purchase_item,
+	never via `disabled` - ERPNext refuses to use a disabled Item as
+	BOM.item at all ("Disabled Item ... cannot be used in BOMs"), which
+	would make this carrier permanently unusable for exactly the one thing
+	it exists for."""
 	item_code = f"{style_doc.style_no}-{colour_code}-BOM"
 	if frappe.db.exists("Item", item_code):
+		if frappe.db.get_value("Item", item_code, "disabled"):
+			# Repair a carrier item created before this fix, or disabled
+			# by hand - otherwise generation keeps failing on it forever.
+			frappe.db.set_value("Item", item_code, "disabled", 0)
+			frappe.db.commit()
 		return item_code
 	item = frappe.new_doc("Item")
 	item.item_code = item_code
@@ -469,7 +480,9 @@ def _get_or_create_colour_carrier_item(style_doc, colour_code):
 	item.item_group = frappe.db.get_value("Item Group", {"is_group": 1}, "name") or "All Item Groups"
 	item.stock_uom = "Nos"
 	item.is_stock_item = 0
-	item.disabled = 1  # not sellable/purchasable on its own - carrier only
+	item.is_sales_item = 0
+	item.is_purchase_item = 0
+	item.disabled = 0
 	item.description = _("Non-stock carrier item. Exists only so the shared {0} colourway BOM has somewhere to attach.").format(colour_code)
 	item.insert(ignore_permissions=True)
 	return item.item_code
