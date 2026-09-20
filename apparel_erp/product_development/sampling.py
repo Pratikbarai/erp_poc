@@ -400,6 +400,50 @@ def add_observation(version, observation_text, category=None, photo=None, pos_x=
 	return get_workspace_sampling(style)
 
 
+def _style_from_observation(obs_doc):
+	stage_plan = frappe.db.get_value("Sample Stage", obs_doc.sample_stage, "sample_plan")
+	return frappe.db.get_value("Sample Plan", stage_plan, "style")
+
+
+@frappe.whitelist()
+def update_observation(observation, observation_text=None, category=None, status=None):
+	if not frappe.has_permission("Sample Observation", "write"):
+		frappe.throw(_("Not permitted to edit this observation"))
+	doc = frappe.get_doc("Sample Observation", observation)
+	version_status = frappe.db.get_value("Sample Version", doc.sample_version, "status")
+	if version_status not in ("In Progress", "Submitted"):
+		frappe.throw(_("Observations can only be edited while the version is In Progress or Submitted."))
+
+	if observation_text is not None:
+		if not observation_text.strip():
+			frappe.throw(_("Observation text is required."))
+		doc.observation_text = observation_text.strip()
+	if category is not None:
+		doc.category = category or None
+	if status is not None:
+		doc.status = status
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+
+	style = _style_from_observation(doc)
+	return get_workspace_sampling(style)
+
+
+@frappe.whitelist()
+def delete_observation(observation):
+	if not frappe.has_permission("Sample Observation", "delete"):
+		frappe.throw(_("Not permitted to delete this observation"))
+	doc = frappe.get_doc("Sample Observation", observation)
+	version_status = frappe.db.get_value("Sample Version", doc.sample_version, "status")
+	if version_status not in ("In Progress", "Submitted"):
+		frappe.throw(_("Observations can only be deleted while the version is In Progress or Submitted."))
+
+	style = _style_from_observation(doc)
+	doc.delete(ignore_permissions=True)
+	frappe.db.commit()
+	return get_workspace_sampling(style)
+
+
 @frappe.whitelist()
 def add_photo(version, file_url, caption=None, capture_source="Desktop"):
 	"""Backs the Sampling tab's camera/upload capture (spec 7 - the

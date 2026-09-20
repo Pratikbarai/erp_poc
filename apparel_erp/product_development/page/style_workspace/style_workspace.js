@@ -1851,16 +1851,18 @@ $panels.html(`
 		let detailHtml = `<div class="sw-card"><div class="sw-card-b"><div class="sw-empty">Select or create a version to see its detail.</div></div></div>`;
 		if (selectedStage && selectedVersion) {
 			const v = selectedVersion;
+			const canEdit = ["In Progress", "Submitted"].includes(v.status);
 			const obsRows = (v.observations || []).length
 				? v.observations.map(o => `<div class="sw-samp-obs sw-samp-obs-${(o.status || "").toLowerCase().replace(/\s+/g, "-")} ${o.name === this.sampling_selected_observation ? "sel" : ""}" data-obs="${o.name}" data-photo="${o.photo || ""}">
 						<span class="sw-samp-obs-seq">${o.photo ? "📍" : "#"}${o.seq}</span>
 						<span class="sw-pill sw-pill-mut">${frappe.utils.escape_html(o.category || "—")}</span>
 						<span class="sw-samp-obs-text">${frappe.utils.escape_html(o.observation_text || "")}</span>
 						<span class="sw-samp-obs-status">${o.status}</span>
+						${canEdit ? `<button type="button" class="sw-btn sw-btn-sm sw-samp-obs-edit" data-obs="${o.name}" title="Edit">Edit</button>
+						<button type="button" class="sw-btn sw-btn-sm sw-samp-obs-delete" data-obs="${o.name}" title="Delete">Delete</button>` : ""}
 					</div>`).join("")
 				: `<div class="sw-empty">No observations on this version.</div>`;
 
-			const canEdit = ["In Progress", "Submitted"].includes(v.status);
 			const activePhotoName = this.sampling_active_photo;
 			const photoStrip = (v.photos || []).map(p => `
 				<div class="sw-samp-photo ${p.name === activePhotoName ? "sel" : ""}" data-photo="${p.name}" data-select-photo="${p.name}" title="Click to view &amp; annotate">
@@ -2075,12 +2077,63 @@ $panels.html(`
 			this.paint_sampling_tab($panels);
 		});
 		$panels.on("click", ".sw-samp-obs", (e) => {
+			if ($(e.target).is(".sw-samp-obs-edit, .sw-samp-obs-delete")) return;
 			const photo = $(e.currentTarget).data("photo");
 			const obs = $(e.currentTarget).data("obs");
 			if (!photo) return;
 			this.sampling_active_photo = photo;
 			this.sampling_selected_observation = (this.sampling_selected_observation === obs) ? null : obs;
 			this.paint_sampling_tab($panels);
+		});
+		$panels.on("click", ".sw-samp-obs-edit", (e) => {
+			e.stopPropagation();
+			const obsName = $(e.currentTarget).data("obs");
+			const stage = (this.workspace_sampling.stages || []).find(st => st.name === this.sampling_selected_stage);
+			const version = stage && (stage.versions || []).find(ver => ver.name === this.sampling_selected_version);
+			const obs = version && (version.observations || []).find(o => o.name === obsName);
+			if (!obs) return;
+			const d = new frappe.ui.Dialog({
+				title: "Edit observation",
+				fields: [
+					{ fieldname: "category", label: "Category", fieldtype: "Link", options: "Observation Category", default: obs.category },
+					{ fieldname: "observation_text", label: "Observation", fieldtype: "Small Text", reqd: 1, default: obs.observation_text },
+					{ fieldname: "status", label: "Status", fieldtype: "Select", options: "Open\nResolved\nCarried Forward", default: obs.status }
+				],
+				primary_action_label: "Save",
+				primary_action: (values) => {
+					frappe.dom.freeze("Saving…");
+					frappe.call({
+						method: "apparel_erp.product_development.sampling.update_observation",
+						args: { observation: obsName, observation_text: values.observation_text, category: values.category, status: values.status },
+						callback: (r) => {
+							frappe.dom.unfreeze();
+							d.hide();
+							this.workspace_sampling = r.message;
+							this.paint_sampling_tab($panels);
+						},
+						error: () => frappe.dom.unfreeze()
+					});
+				}
+			});
+			d.show();
+		});
+		$panels.on("click", ".sw-samp-obs-delete", (e) => {
+			e.stopPropagation();
+			const obsName = $(e.currentTarget).data("obs");
+			frappe.confirm(__("Delete this observation?"), () => {
+				frappe.dom.freeze("Deleting…");
+				frappe.call({
+					method: "apparel_erp.product_development.sampling.delete_observation",
+					args: { observation: obsName },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						this.workspace_sampling = r.message;
+						if (this.sampling_selected_observation === obsName) this.sampling_selected_observation = null;
+						this.paint_sampling_tab($panels);
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			});
 		});
 	}
 
