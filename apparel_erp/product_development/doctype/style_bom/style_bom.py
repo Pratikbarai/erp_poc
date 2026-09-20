@@ -504,7 +504,13 @@ def _production_bom_name(style_doc, colour_code, size_code=None):
 def _rename_to_production_name(bom, new_name):
 	if new_name == bom.name:
 		return bom
-	frappe.rename_doc("BOM", bom.name, new_name, force=True)
+	# Every other write in this generation flow runs with
+	# ignore_permissions=True (the user triggering "Generate" often has
+	# create rights on Style BOM without also having direct write/rename
+	# rights on ERPNext's core BOM doctype) - the rename step was the one
+	# place that got missed, causing "You need write permission on BOM
+	# ... to rename" even though the BOM had just been inserted fine.
+	frappe.rename_doc("BOM", bom.name, new_name, force=True, ignore_permissions=True)
 	return frappe.get_doc("BOM", new_name)
 
 
