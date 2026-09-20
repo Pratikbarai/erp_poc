@@ -79,7 +79,21 @@ function render_generation_log(frm) {
 		field.$wrapper.html(html);
 		field.$wrapper.find(".sw-open-bom").on("click", function (e) {
 		    e.preventDefault();
-		    frappe.set_route("Form", "BOM", $(this).attr("data-bom"));
+		    const bom_name = $(this).attr("data-bom");
+		    if (!bom_name) {
+		        frappe.show_alert({ message: __("No BOM name recorded for this row."), indicator: "red" });
+		        return;
+		    }
+		    frappe.db.exists("BOM", bom_name).then((exists) => {
+		        if (exists) {
+		            frappe.set_route("Form", "BOM", bom_name);
+		        } else {
+		            frappe.show_alert({
+		                message: __("{0} no longer exists - it may have been renamed, cancelled and deleted, or merged into another BOM since this log entry was written.", [bom_name]),
+		                indicator: "red"
+		            });
+		        }
+		    });
 		});
 	});
 }
