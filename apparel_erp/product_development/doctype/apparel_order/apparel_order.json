@@ -16,7 +16,8 @@
   {"fieldname": "delivery_date", "fieldtype": "Date", "label": "Delivery / Ex-factory Date"},
   {"fieldname": "sb_matrix", "fieldtype": "Section Break", "label": "Order Matrix"},
   {"fieldname": "order_matrix", "fieldtype": "Table", "options": "Apparel Order Matrix Item", "label": "Colour x Size Quantities", "description": "Only non-zero cells here are treated as actually ordered - the BOM Generator and production readiness checks read this, not the raw colour x size matrix, to decide what to build."},
-  {"fieldname": "total_quantity", "fieldtype": "Int", "label": "Total Quantity", "read_only": 1, "in_list_view": 1}
+  {"fieldname": "total_quantity", "fieldtype": "Int", "label": "Total Quantity", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "sales_order", "fieldtype": "Link", "options": "Sales Order", "label": "Sales Order", "read_only": 1, "no_copy": 1, "description": "ERPNext Sales Order created from this order's ordered SKUs (hand-off to standard manufacturing)."}
  ],
  "permissions": [
   {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},

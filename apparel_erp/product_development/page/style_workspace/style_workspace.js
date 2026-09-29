@@ -883,6 +883,9 @@ class StyleWorkspace {
 					<h2>Order matrix</h2>
 					<div class="right">
 						<span class="sw-note" style="margin-right:8px">Only non-zero cells count as ordered - these drive BOM generation.</span>
+						${o.sales_order
+						? `<a href="#" class="sw-btn sw-btn-sm" id="swOpenSalesOrder" data-so="${frappe.utils.escape_html(o.sales_order)}">Sales Order ${frappe.utils.escape_html(o.sales_order)} →</a>`
+						: `<button class="sw-btn sw-btn-sm" id="swCreateSalesOrder">Create Sales Order</button>`}
 						<button class="sw-btn sw-btn-sm" id="swOpenOrderForm">Open full record</button>
 					</div>
 				</div>
@@ -895,6 +898,25 @@ class StyleWorkspace {
 
 	bind_order_tab($panels) {
 		$panels.off();
+		$panels.find("#swCreateSalesOrder").on("click", () => {
+			frappe.confirm(__("Create an ERPNext Sales Order from the non-zero cells of this order? Every ordered colour x size needs a generated SKU first."), () => {
+				frappe.dom.freeze("Creating Sales Order…");
+				frappe.call({
+					method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.create_sales_order_from_apparel_order",
+					args: { style: this.style.name },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						sw_toast(this.wrapper, `Sales Order ${r.message.sales_order} ${r.message.created ? "created" : "already exists"}.`);
+						this.render_order_tab($panels);
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			});
+		});
+		$panels.find("#swOpenSalesOrder").on("click", (e) => {
+			e.preventDefault();
+			frappe.set_route("Form", "Sales Order", $(e.currentTarget).data("so"));
+		});
 		$panels.find("#swOpenOrderForm").on("click", () => {
 			if (this.workspace_order && this.workspace_order.name) {
 				frappe.set_route("Form", "Apparel Order", this.workspace_order.name);

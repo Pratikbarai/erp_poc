@@ -37,3 +37,13 @@ doc_events = {
     }
 }
 
+# Shows "Apparel ERP" as its own tile on the Frappe apps screen / home,
+# opening straight into the Style Workspace page (Frappe v15+/v16).
+add_to_apps_screen = [
+    {
+        "name": "apparel_erp",
+        "logo": "/assets/frappe/images/frappe-framework-logo.svg",
+        "title": "Apparel ERP",
+        "route": "/desk/style-workspace",
+    }
+]

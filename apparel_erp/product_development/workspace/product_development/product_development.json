@@ -1,0 +1,20 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"hdr1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Apparel ERP</b></span>\",\"col\":12}},{\"id\":\"sc1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Style Workspace\",\"col\":3}},{\"id\":\"sc2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Styles\",\"col\":3}},{\"id\":\"sc3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Apparel Orders\",\"col\":3}},{\"id\":\"sc4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sampling Templates\",\"col\":3}}]",
+ "doctype": "Workspace",
+ "icon": "hanger",
+ "indicator_color": "blue",
+ "is_hidden": 0,
+ "label": "Apparel ERP",
+ "module": "Product Development",
+ "name": "Apparel ERP",
+ "public": 1,
+ "sequence_id": 1.0,
+ "shortcuts": [
+  {"label": "Style Workspace", "link_to": "style-workspace", "type": "Page", "color": "Blue"},
+  {"label": "Styles", "link_to": "Style", "type": "DocType", "doc_view": "List", "color": "Blue"},
+  {"label": "Apparel Orders", "link_to": "Apparel Order", "type": "DocType", "doc_view": "List", "color": "Green"},
+  {"label": "Sampling Templates", "link_to": "Sampling Template", "type": "DocType", "doc_view": "List", "color": "Orange"}
+ ],
+ "title": "Apparel ERP"
+}

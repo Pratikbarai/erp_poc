@@ -30,6 +30,7 @@ def _serialize(doc):
 		"incoterm": doc.incoterm,
 		"delivery_date": doc.delivery_date,
 		"total_quantity": doc.total_quantity or 0,
+		"sales_order": doc.get("sales_order"),
 		"order_matrix": rows,
 	}
 
@@ -141,3 +142,71 @@ def get_ordered_combinations(style):
 		{"colour_code": r.colour_code, "size_code": r.size_code, "quantity": r.quantity}
 		for r in doc.order_matrix if (r.quantity or 0) > 0
 	]
+
+
+@frappe.whitelist()
+def create_sales_order_from_apparel_order(style):
+	"""Hand-off to standard ERPNext manufacturing (architecture doc, section 6):
+	Apparel Order matrix -> real Sales Order on the generated SKU Items.
+
+	Only non-zero ordered cells become Sales Order rows. Every ordered cell
+	must already have a SKU Item (created by "Generate all SKUs") - if not,
+	this stops with the exact list of missing colour/size cells rather than
+	silently creating a partial order. Safe to click twice: if a non-cancelled
+	Sales Order is already linked, it is returned instead of creating another.
+	From the Sales Order, standard ERPNext takes over (Production Plan, Work
+	Orders, Material Requests) using the Production BOMs on those SKU Items."""
+	name = _latest_order_name(style)
+	if not name:
+		frappe.throw(_("No Apparel Order for {0}.").format(style))
+	if not frappe.has_permission("Sales Order", "create"):
+		frappe.throw(_("Not permitted to create a Sales Order"))
+
+	order = frappe.get_doc("Apparel Order", name)
+	if order.status == "Cancelled":
+		frappe.throw(_("{0} is cancelled.").format(order.name))
+
+	if order.get("sales_order"):
+		if frappe.db.get_value("Sales Order", order.sales_order, "docstatus") in (0, 1):
+			return {"sales_order": order.sales_order, "created": False}
+
+	rows = [r for r in order.order_matrix if (r.quantity or 0) > 0]
+	if not rows:
+		frappe.throw(_("{0} has no ordered (non-zero) quantities.").format(order.name))
+	if not order.customer:
+		frappe.throw(_("Set a Customer on {0} first.").format(order.name))
+
+	customer = frappe.db.get_value("Customer", {"customer_name": order.customer}, "name")
+	if not customer:
+		customer = frappe.get_doc({
+			"doctype": "Customer", "customer_name": order.customer, "customer_type": "Company",
+			"customer_group": "All Customer Groups", "territory": "All Territories",
+		}).insert(ignore_permissions=True).name
+
+	items, missing = [], []
+	for r in rows:
+		item = frappe.db.get_value(
+			"Style Matrix Item", {"parent": style, "colour_code": r.colour_code, "size_code": r.size_code}, "item"
+		)
+		if not item:
+			missing.append(f"{r.colour_code}/{r.size_code}")
+		else:
+			items.append({"item_code": item, "qty": r.quantity, "delivery_date": order.delivery_date})
+	if missing:
+		frappe.throw(_(
+			"No SKU Item yet for: {0}. Run \"Generate all SKUs\" on the Colours & sizes tab first."
+		).format(", ".join(missing)))
+
+	so = frappe.new_doc("Sales Order")
+	so.customer = customer
+	so.company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
+	so.transaction_date = frappe.utils.today()
+	so.delivery_date = order.delivery_date or frappe.utils.add_days(frappe.utils.today(), 30)
+	so.po_no = order.buyer_po
+	for row in items:
+		so.append("items", row)
+	so.insert(ignore_permissions=True)
+
+	frappe.db.set_value("Apparel Order", order.name, "sales_order", so.name)
+	frappe.db.commit()
+	return {"sales_order": so.name, "created": True}

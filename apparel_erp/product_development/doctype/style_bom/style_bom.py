@@ -294,6 +294,7 @@ def generate_production_boms(style_bom_name):
 		ensure_matrix_sku_item,
 		sync_matrix_for_sku_bom,
 	)
+	from apparel_erp.product_development.doctype.apparel_order.apparel_order import get_ordered_combinations
 
 	sb = frappe.get_doc("Style BOM", style_bom_name)
 	style_doc = frappe.get_doc("Style", sb.style)
@@ -311,6 +312,31 @@ def generate_production_boms(style_bom_name):
 
 	active_colourways = [c for c in style_doc.colours if (c.status or "Active") == "Active" and c.get("approved_for_production")]
 
+	# Spec section 4 step 2 (FILTER): once an Apparel Order / Buyer PO exists
+	# for this style, generation is driven by its actual ordered colour x
+	# size quantities, not by every Active + Approved colourway/size -
+	# zero-quantity cells are ignored, matching the ST-1045 worked example
+	# (8 ordered combinations out of 16 possible -> 8 BOMs, not 16). A style
+	# with no Apparel Order yet falls back to the old "every active
+	# colourway" behaviour, so BOM generation still works before an order
+	# exists (early costing/development BOMs, samples, etc).
+	has_order = bool(frappe.db.exists("Apparel Order", {"style": style_doc.name}))
+	ordered = get_ordered_combinations(style_doc.name) if has_order else None
+	if ordered is not None and not ordered:
+		frappe.throw(_(
+			"{0} has an Apparel Order but no ordered (non-zero) colour x size quantities yet. "
+			"Add quantities on the Order tab before generating."
+		).format(style_doc.name))
+	ordered_colours = {o["colour_code"] for o in ordered} if ordered is not None else None
+	ordered_pairs = {(o["colour_code"], o["size_code"]) for o in ordered} if ordered is not None else None
+
+	if ordered_colours is not None:
+		active_colourways = [cw for cw in active_colourways if (cw.colour_code or cw.colour_name) in ordered_colours]
+		if not active_colourways:
+			frappe.throw(_(
+				"None of the ordered colourways on {0}'s Apparel Order are both Active and Approved for Production."
+			).format(style_doc.name))
+
 	generated = []
 	frappe.flags.in_style_bom_generation = True
 	try:
@@ -319,6 +345,8 @@ def generate_production_boms(style_bom_name):
 				colour_code = cw.colour_code or cw.colour_name
 				for size_row in style_doc.sizes:
 					size_code = frappe.db.get_value("Size", size_row.size, "size_code") or size_row.size
+					if ordered_pairs is not None and (colour_code, size_code) not in ordered_pairs:
+						continue
 					sku_item = ensure_matrix_sku_item(style_doc.name, colour_code, size_code)
 
 					def _build(cw=cw, colour_code=colour_code, size_code=size_code, sku_item=sku_item):
