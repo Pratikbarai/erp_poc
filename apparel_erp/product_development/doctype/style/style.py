@@ -151,7 +151,8 @@ def sync_matrix_for_colour_bom(style, colour_code, bom_name):
 			row.item_code = item.item_code
 		row.bom = bom_name
 		row.status = "Active"
-		row.production_for_sku = row.get("production_for_sku") or 1
+		if row.get("production_for_sku") is None:
+			row.production_for_sku = 1
 
 	style_doc.save(ignore_permissions=True)
 	frappe.db.commit()
@@ -236,8 +237,10 @@ def set_matrix_item_status(style, matrix_item, status):
 
 @frappe.whitelist()
 def get_production_selection_matrix(style):
-	"""Return matrix data for production selection dialog."""
+	"""Return matrix data for production selection."""
 	style_doc = frappe.get_doc("Style", style)
+	if not frappe.has_permission("Style", "read", doc=style_doc):
+		frappe.throw(_("Not permitted to read Style {0}").format(style))
 	
 	# Group matrix items by colour and size
 	matrix_data = []
@@ -250,7 +253,7 @@ def get_production_selection_matrix(style):
 			"size_code": row.size_code,
 			"sku": row.sku or f"{style_doc.style_no}-{row.colour_code}-{row.size_code}",
 			"status": row.status,
-			"production_for_sku": row.get("production_for_sku") or 1,  # Default to 1 (true)
+			"production_for_sku": 1 if row.get("production_for_sku") is None else row.production_for_sku,
 			"has_bom": bool(row.bom)
 		})
 	
@@ -266,6 +269,8 @@ def save_production_selection(style, selection_data):
 		selection_data = json.loads(selection_data)
 	
 	style_doc = frappe.get_doc("Style", style)
+	if not frappe.has_permission("Style", "write", doc=style_doc):
+		frappe.throw(_("Not permitted to update Style {0}").format(style))
 	
 	# Update matrix items with production selection
 	for item_data in selection_data:
@@ -278,6 +283,55 @@ def save_production_selection(style, selection_data):
 	frappe.db.commit()
 	
 	return {"success": True, "message": _("Production selection saved successfully.")}
+
+
+@frappe.whitelist()
+def create_sales_order_from_style(style, customer, company, items, transaction_date=None, delivery_date=None):
+	"""Create a draft Sales Order from generated Style SKUs selected for production."""
+	import json
+	from frappe.utils import flt, nowdate
+
+	if isinstance(items, str):
+		items = json.loads(items)
+	if not items:
+		frappe.throw(_("Select at least one SKU for the Sales Order."))
+
+	style_doc = frappe.get_doc("Style", style)
+	if not frappe.has_permission("Style", "read", doc=style_doc):
+		frappe.throw(_("Not permitted to read Style {0}").format(style))
+	if not frappe.has_permission("Sales Order", "create"):
+		frappe.throw(_("Not permitted to create a Sales Order."))
+	if not frappe.db.exists("Customer", customer):
+		frappe.throw(_("Customer {0} does not exist.").format(customer))
+	if not frappe.db.exists("Company", company):
+		frappe.throw(_("Company {0} does not exist.").format(company))
+
+	matrix_rows = {row.name: row for row in style_doc.matrix_items}
+	order = frappe.new_doc("Sales Order")
+	order.customer = customer
+	order.company = company
+	order.transaction_date = transaction_date or nowdate()
+	order.delivery_date = delivery_date
+	seen_rows = set()
+	for item_data in items:
+		row_name = item_data.get("name")
+		matrix_row = matrix_rows.get(row_name)
+		if not matrix_row or (matrix_row.get("production_for_sku") is not None and not matrix_row.production_for_sku):
+			frappe.throw(_("SKU {0} is not selected for production.").format(row_name))
+		if row_name in seen_rows:
+			frappe.throw(_("SKU {0} was included more than once.").format(row_name))
+		seen_rows.add(row_name)
+		if not matrix_row.item or not frappe.db.exists("Item", matrix_row.item):
+			frappe.throw(_("Generate the SKU for {0} before creating a Sales Order.").format(row_name))
+		quantity = flt(item_data.get("qty"))
+		if quantity <= 0:
+			frappe.throw(_("Quantity for {0} must be greater than zero.").format(row_name))
+		order_item = order.append("items", {"item_code": matrix_row.item, "qty": quantity})
+		if delivery_date:
+			order_item.delivery_date = delivery_date
+
+	order.insert()
+	return {"name": order.name}
 
 
 def _get_or_create_item_group(name):

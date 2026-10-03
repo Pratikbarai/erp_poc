@@ -1,1 +1,1 @@
-recursive-include apparel_erp *.json *.js *.css *.html *.md
+recursive-include apparel_erp *.json *.js *.css *.html *.md *.svg
