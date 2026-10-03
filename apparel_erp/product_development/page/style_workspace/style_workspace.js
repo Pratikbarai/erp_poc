@@ -2062,10 +2062,12 @@ $panels.html(`
 			<tr>
 				<td><button type="button" class="sw-btn sw-btn-sm sw-jobwork-open" data-doctype="Subcontracting Order" data-name="${frappe.utils.escape_html(doc.name)}">${frappe.utils.escape_html(doc.name)} →</button></td>
 				<td>${frappe.utils.escape_html(doc.supplier_name || doc.supplier || "")}</td>
-				<td>${doc.purchase_order ? `<button type="button" class="sw-btn sw-btn-sm sw-jobwork-open" data-doctype="Purchase Order" data-name="${frappe.utils.escape_html(doc.purchase_order)}">${frappe.utils.escape_html(doc.purchase_order)}</button>` : "—"}</td>
+				<td>${doc.purchase_order ? (frappe.model.can_read("Purchase Order")
+					? `<button type="button" class="sw-btn sw-btn-sm sw-jobwork-open" data-doctype="Purchase Order" data-name="${frappe.utils.escape_html(doc.purchase_order)}">${frappe.utils.escape_html(doc.purchase_order)}</button>`
+					: frappe.utils.escape_html(doc.purchase_order)) : "—"}</td>
 				<td>${doc.transaction_date ? frappe.datetime.str_to_user(doc.transaction_date) : "—"}</td>
 				<td class="num">${frappe.format(doc.total_qty || 0, { fieldtype: "Float" })}</td>
-				<td>${statusPill(doc)}</td>
+				<td>${statusPill(doc)} ${doc.docstatus === 1 && frappe.model.can_create("Subcontracting Receipt") ? `<button type="button" class="sw-btn sw-btn-sm sw-jobwork-create-receipt" data-name="${frappe.utils.escape_html(doc.name)}">Create Receipt</button>` : ""}</td>
 			</tr>`).join("") : `<tr><td colspan="6" class="sw-empty">${plan ? "No Subcontracting Orders linked to this Production Plan." : "Create a Production Plan before starting ERPNext subcontracting."}</td></tr>`;
 		const receiptRows = receipts.length ? receipts.map((doc) => `
 			<tr>
@@ -2080,10 +2082,10 @@ $panels.html(`
 			<div class="sw-card">
 				<div class="sw-card-h"><h2>ERPNext Job Work</h2><div class="right">
 					${plan ? `<button type="button" class="sw-btn sw-btn-sm" id="swJobWorkPlan">Open Production Plan</button>` : `<button type="button" class="sw-btn sw-btn-sm" id="swJobWorkManufacturing">Open Manufacturing</button>`}
-					<button type="button" class="sw-btn sw-btn-sm" id="swJobWorkPurchaseOrders">Purchase Orders</button>
+					${plan && plan.docstatus === 1 && frappe.model.can_create("Subcontracting Order") ? `<button type="button" class="sw-btn sw-btn-pri sw-btn-sm" id="swJobWorkCreateOrder">Create Subcontracting Order</button>` : ""}
 				</div></div>
 				<div class="sw-card-b">
-					<div class="sw-muted-sm">Subcontracting Orders are linked through the ERPNext Production Plan; material receipts remain native Subcontracting Receipts.</div>
+					<div class="sw-muted-sm">${plan && plan.docstatus !== 1 ? "Submit the Production Plan before creating job work." : "Create an order from a submitted subcontracting Purchase Order so ERPNext can map its items. Receipts are mapped from each submitted Subcontracting Order."}</div>
 					<h3>Subcontracting Orders ${subcontractingOrders.length ? `<span class="sw-count">${subcontractingOrders.length}</span>` : ""}</h3>
 					<table class="sw-prodbom-table"><thead><tr><th>Order</th><th>Job Worker</th><th>Purchase Order</th><th>Date</th><th class="num">Qty</th><th>Status</th></tr></thead><tbody>${orderRows}</tbody></table>
 				</div>
@@ -2095,11 +2097,50 @@ $panels.html(`
 
 		$panels.off();
 		$panels.find(".sw-jobwork-open").on("click", (e) => {
-			frappe.set_route("Form", $(e.currentTarget).data("doctype"), $(e.currentTarget).data("name"));
+			const doctype = $(e.currentTarget).data("doctype");
+			const name = $(e.currentTarget).data("name");
+			if (!frappe.model.can_read(doctype)) {
+				frappe.msgprint(__("You do not have permission to read {0}. Ask your administrator to grant read access.", [doctype]));
+				return;
+			}
+			frappe.db.exists(doctype, name).then((exists) => {
+				if (exists) {
+					frappe.set_route("Form", doctype, name);
+				} else {
+					frappe.show_alert({
+						message: __("{0} no longer exists. Refresh the tab to update its linked records.", [name]),
+						indicator: "red"
+					});
+				}
+			});
 		});
 		$panels.find("#swJobWorkPlan").on("click", () => frappe.set_route("Form", "Production Plan", plan.name));
 		$panels.find("#swJobWorkManufacturing").on("click", () => this.switch_tab("manufacturing"));
-		$panels.find("#swJobWorkPurchaseOrders").on("click", () => frappe.set_route("List", "Purchase Order"));
+		$panels.find("#swJobWorkCreateOrder").on("click", () => {
+			frappe.new_doc("Subcontracting Order", { production_plan: plan.name });
+		});
+		$panels.find(".sw-jobwork-create-receipt").on("click", (e) => {
+			const sourceName = $(e.currentTarget).data("name");
+			frappe.dom.freeze(__("Preparing Subcontracting Receipt…"));
+			frappe.call({
+				method: "erpnext.subcontracting.doctype.subcontracting_order.subcontracting_order.make_subcontracting_receipt",
+				args: { source_name: sourceName },
+				callback: (r) => {
+					frappe.dom.unfreeze();
+					if (!r.message) {
+						frappe.msgprint(__("ERPNext did not return a Subcontracting Receipt for {0}.", [sourceName]));
+						return;
+					}
+					const docs = frappe.model.sync(r.message);
+					if (!docs.length) {
+						frappe.msgprint(__("ERPNext returned an empty Subcontracting Receipt."));
+						return;
+					}
+					frappe.set_route("Form", docs[0].doctype, docs[0].name);
+				},
+				error: () => frappe.dom.unfreeze()
+			});
+		});
 	}
 
 	// ---------- Sampling ----------

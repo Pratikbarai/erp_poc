@@ -154,10 +154,14 @@ def create_sales_order_from_apparel_order(style):
 	name = _latest_order_name(style)
 	if not name:
 		frappe.throw(_("No Apparel Order for {0}.").format(style))
-	if not frappe.has_permission("Sales Order", "create"):
-		frappe.throw(_("Not permitted to create a Sales Order"))
 
 	order = frappe.get_doc("Apparel Order", name)
+	if not (
+		frappe.has_permission("Sales Order", "create")
+		or frappe.has_permission("Apparel Order", "write", order)
+	):
+		frappe.throw(_("Not permitted to create a Sales Order"))
+
 	if order.status == "Cancelled":
 		frappe.throw(_("{0} is cancelled.").format(order.name))
 
@@ -354,16 +358,40 @@ def get_workspace_manufacturing(style):
 	subcontracting_orders = []
 	subcontracting_receipts = []
 	if production_plan and frappe.has_permission("Subcontracting Order", "read"):
-		subcontracting_orders = frappe.get_list(
-			"Subcontracting Order",
-			filters={"production_plan": production_plan.name},
-			fields=[
-				"name", "supplier", "supplier_name", "status", "docstatus",
-				"purchase_order", "production_plan", "transaction_date", "total_qty",
-			],
-			order_by="creation desc",
-			limit_page_length=0,
+		subcontracting_order_names = {
+			row.name
+			for row in frappe.get_list(
+				"Subcontracting Order",
+				filters={"production_plan": production_plan.name},
+				fields=["name"],
+				limit_page_length=0,
+			)
+		}
+		plan_subassembly_names = frappe.get_all(
+			"Production Plan Sub Assembly Item",
+			filters={"parent": production_plan.name},
+			pluck="name",
 		)
+		if plan_subassembly_names:
+			subcontracting_order_names.update(
+				frappe.get_all(
+					"Subcontracting Order Item",
+					filters={"production_plan_sub_assembly_item": ["in", plan_subassembly_names]},
+					pluck="parent",
+				)
+			)
+
+		if subcontracting_order_names:
+			subcontracting_orders = frappe.get_list(
+				"Subcontracting Order",
+				filters={"name": ["in", list(subcontracting_order_names)]},
+				fields=[
+					"name", "supplier", "supplier_name", "status", "docstatus",
+					"purchase_order", "production_plan", "transaction_date", "total_qty",
+				],
+				order_by="creation desc",
+				limit_page_length=0,
+			)
 		if subcontracting_orders and frappe.has_permission("Subcontracting Receipt", "read"):
 			subcontracting_order_names = [row.name for row in subcontracting_orders]
 			receipt_names = {
