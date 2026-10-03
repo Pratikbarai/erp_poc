@@ -1,5 +1,6 @@
 app_name = "apparel_erp"
 app_title = "Apparel ERP"
+app_logo_url = "/assets/apparel_erp/images/apparel_erp_icon.svg"
 app_publisher = "Your Company"
 app_description = "Apparel PLM - Styles, Colour x Size matrix, auto SKU + BOM generation, Design & Tech Pack"
 app_email = "admin@example.com"

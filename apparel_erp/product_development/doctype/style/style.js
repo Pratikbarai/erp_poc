@@ -25,10 +25,6 @@ frappe.ui.form.on("Style", {
 			frm.save().then(() => render_matrix(frm));
 		});
 
-		frm.add_custom_button(__("Production Selection"), () => {
-			show_production_selection_dialog(frm);
-		}).addClass("btn-info");
-
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Open/Create Style BOM"), () => {
 				open_style_bom(frm);
@@ -267,12 +263,20 @@ function render_matrix(frm) {
 					? `${matrix_row.item_name}${matrix_row.item_code ? ` (${matrix_row.item_code})` : ""}`
 					: matrix_row.sku || matrix_row.item || matrix_row.bom;
 				const item_status = matrix_row.status || "Active";
+				const production_checked = matrix_row.production_for_sku === undefined
+					|| matrix_row.production_for_sku === null
+					|| Boolean(matrix_row.production_for_sku);
 				html += `<a href="#" class="matrix-sku matrix-generated" data-item="${frappe.utils.escape_html(matrix_row.item || "")}">
 					${frappe.utils.escape_html(item_label)}</a>
-					<button type="button" class="btn btn-xs matrix-status-button" data-row="${frappe.utils.escape_html(matrix_row.name)}">${frappe.utils.escape_html(item_status)}</button>`;
+					<button type="button" class="btn btn-xs matrix-status-button" data-row="${frappe.utils.escape_html(matrix_row.name)}">${frappe.utils.escape_html(item_status)}</button>
+					<label class="matrix-production-toggle"><input type="checkbox" class="matrix-production-checkbox" data-row="${frappe.utils.escape_html(matrix_row.name)}" ${production_checked ? "checked" : ""}> ${__("For Production")}</label>`;
 			} else if (matrix_row) {
 				html += `<a href="#" class="matrix-sku matrix-empty">
 					${__("+ Generate")}</a>`;
+				const production_checked = matrix_row.production_for_sku === undefined
+					|| matrix_row.production_for_sku === null
+					|| Boolean(matrix_row.production_for_sku);
+				html += `<label class="matrix-production-toggle"><input type="checkbox" class="matrix-production-checkbox" data-row="${frappe.utils.escape_html(matrix_row.name)}" ${production_checked ? "checked" : ""}> ${__("For Production")}</label>`;
 			} else {
 				html += `<span class="text-muted">${__("--")}</span>`;
 			}
@@ -288,10 +292,44 @@ function render_matrix(frm) {
 		.apparel-matrix .matrix-empty { color: var(--text-muted); border: 1px dashed var(--dark-border-color); border-radius: 4px; padding: 6px 10px; }
 		.apparel-matrix .matrix-generated { font-weight: 600; }
 		.apparel-matrix .matrix-status-button { display: block; margin: 2px auto 0; }
+		.apparel-matrix .matrix-production-toggle { display: block; margin: 6px auto 0; font-size: 11px; white-space: nowrap; }
+		.apparel-matrix-save { margin-top: 10px; }
 	</style>`;
+	if ((frm.doc.matrix_items || []).length) {
+		html += `<button type="button" class="btn btn-primary btn-sm apparel-matrix-save">${__("Save Production Selection")}</button>`;
+		html += ` <button type="button" class="btn btn-default btn-sm apparel-create-sales-order">${__("Create Sales Order")}</button>`;
+	}
 
 	wrapper.html(html);
 	render_production_readiness(frm);
+	wrapper.find(".apparel-matrix-save").on("click", function () {
+		save_production_selection(frm, collect_production_selection(wrapper)).then((r) => {
+			if (r.message && r.message.success) {
+				frappe.show_alert({ message: __("Production selection saved."), indicator: "green" });
+				frm.reload_doc().then(() => render_matrix(frm));
+			}
+		});
+	});
+	wrapper.find(".apparel-create-sales-order").on("click", function () {
+		const selections = collect_production_selection(wrapper);
+		const selected_rows = selections
+			.filter(item => item.production_for_sku)
+			.map(item => (frm.doc.matrix_items || []).find(row => row.name === item.name));
+		if (!selected_rows.length) {
+			frappe.msgprint(__("Select at least one combination for production first."));
+			return;
+		}
+		const not_generated = selected_rows.filter(row => !row || !row.item);
+		if (not_generated.length) {
+			frappe.msgprint(__("Generate every selected SKU from the submitted Bulk Style BOM before creating a Sales Order."));
+			return;
+		}
+		save_production_selection(frm, selections).then((r) => {
+			if (r.message && r.message.success) {
+				show_sales_order_dialog(frm, selected_rows);
+			}
+		});
+	});
 
 	wrapper.find(".matrix-sku").on("click", function (e) {
 		e.preventDefault();
@@ -339,6 +377,81 @@ function render_matrix(frm) {
 		});
 		dialog.show();
 	});
+}
+
+function collect_production_selection(wrapper) {
+	const selections = [];
+	wrapper.find(".matrix-production-checkbox").each(function () {
+		selections.push({
+			name: $(this).attr("data-row"),
+			production_for_sku: this.checked ? 1 : 0
+		});
+	});
+	return selections;
+}
+
+function save_production_selection(frm, selections) {
+	return frappe.call({
+		method: "apparel_erp.product_development.doctype.style.style.save_production_selection",
+		args: { style: frm.doc.name, selection_data: selections },
+		freeze: true,
+		freeze_message: __("Saving production selection...")
+	});
+}
+
+function show_sales_order_dialog(frm, matrix_rows) {
+	const delivery_date = frappe.datetime.add_days(frappe.datetime.get_today(), 7);
+	let items_html = `<table class="table table-bordered"><thead><tr><th>${__("SKU")}</th><th>${__("Colour")}</th><th>${__("Size")}</th><th>${__("Qty")}</th></tr></thead><tbody>`;
+	matrix_rows.forEach(row => {
+		items_html += `<tr>
+			<td>${frappe.utils.escape_html(row.item_code || row.item)}</td>
+			<td>${frappe.utils.escape_html(row.colour || "")}</td>
+			<td>${frappe.utils.escape_html(row.size || "")}</td>
+			<td><input type="number" class="form-control sales-order-quantity" data-row="${frappe.utils.escape_html(row.name)}" min="0" step="any" value="1"></td>
+		</tr>`;
+	});
+	items_html += `</tbody></table>`;
+	const dialog = new frappe.ui.Dialog({
+		title: __("Create Sales Order"),
+		fields: [
+			{ fieldtype: "Link", fieldname: "customer", label: __("Customer"), options: "Customer", reqd: 1 },
+			{ fieldtype: "Link", fieldname: "company", label: __("Company"), options: "Company", default: frm.doc.company, reqd: 1 },
+			{ fieldtype: "Date", fieldname: "transaction_date", label: __("Order Date"), default: frappe.datetime.get_today(), reqd: 1 },
+			{ fieldtype: "Date", fieldname: "delivery_date", label: __("Delivery Date"), default: delivery_date, reqd: 1 },
+			{ fieldtype: "HTML", fieldname: "items_html", html: items_html }
+		],
+		primary_action_label: __("Create Draft Sales Order"),
+		primary_action(values) {
+			const items = [];
+			dialog.$wrapper.find(".sales-order-quantity").each(function () {
+				const qty = Number(this.value);
+				if (qty > 0) items.push({ name: $(this).attr("data-row"), qty });
+			});
+			if (!items.length) {
+				frappe.msgprint(__("Enter a quantity greater than zero for at least one SKU."));
+				return;
+			}
+			frappe.call({
+				method: "apparel_erp.product_development.doctype.style.style.create_sales_order_from_style",
+				args: {
+					style: frm.doc.name,
+					customer: values.customer,
+					company: values.company,
+					transaction_date: values.transaction_date,
+					delivery_date: values.delivery_date,
+					items
+				},
+				freeze: true,
+				freeze_message: __("Creating Sales Order...")
+			}).then((r) => {
+				if (r.message && r.message.name) {
+					dialog.hide();
+					frappe.set_route("Form", "Sales Order", r.message.name);
+				}
+			});
+		}
+	});
+	dialog.show();
 }
 
 function get_size_code(frm, size_link) {

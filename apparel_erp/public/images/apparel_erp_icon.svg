@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Apparel ERP</title>
+  <desc id="desc">A stitched garment with a colour and size matrix badge.</desc>
+  <rect width="512" height="512" rx="112" fill="#173c3a"/>
+  <path d="m187 126-70 35-50 72 66 47 30-31v111c0 21 13 34 34 34h118c21 0 34-13 34-34V249l30 31 66-47-50-72-70-35c-14 28-38 43-69 43s-55-15-69-43Z" fill="#e6b85c"/>
+  <path d="M209 136c5 28 21 43 47 43s42-15 47-43" fill="none" stroke="#fbf1da" stroke-linecap="round" stroke-width="13"/>
+  <path d="m127 232 35 25m223-25-35 25M179 282v71m154-71v71" fill="none" stroke="#fbf1da" stroke-dasharray="3 12" stroke-linecap="round" stroke-width="6"/>
+  <rect x="210" y="246" width="92" height="92" rx="15" fill="#e8755c"/>
+  <path d="M256 259v66m-33-33h66" fill="none" stroke="#fbf1da" stroke-linecap="round" stroke-width="8"/>
+  <circle cx="239" cy="276" r="5" fill="#173c3a"/>
+  <circle cx="273" cy="276" r="5" fill="#173c3a"/>
+  <circle cx="239" cy="310" r="5" fill="#173c3a"/>
+  <circle cx="273" cy="310" r="5" fill="#173c3a"/>
+</svg>
