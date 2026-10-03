@@ -229,6 +229,7 @@ class StyleWorkspace {
 					<button data-t="colours" class="${this.active_tab === "colours" ? "on" : ""}">Colours &amp; sizes<span class="sw-count">${(s.matrix_items || []).length}</span></button>
 					<button data-t="bom" class="${this.active_tab === "bom" ? "on" : ""}">Style BOM</button>
 					<button data-t="prodbom" class="${this.active_tab === "prodbom" ? "on" : ""}">Production BOM${this.prodbom_count ? `<span class="sw-count">${this.prodbom_count}</span>` : ""}</button>
+					<button data-t="manufacturing" class="${this.active_tab === "manufacturing" ? "on" : ""}">Manufacturing</button>
 					<button data-t="techpack" class="${this.active_tab === "techpack" ? "on" : ""}">Tech pack</button>
 					<button data-t="costing" class="${this.active_tab === "costing" ? "on" : ""}">Costing</button>
 					<button data-t="sampling" class="${this.active_tab === "sampling" ? "on" : ""}">Sampling${this.sampling_count ? `<span class="sw-count">${this.sampling_count}</span>` : ""}</button>
@@ -259,6 +260,7 @@ class StyleWorkspace {
 		else if (this.active_tab === "colours") { $panels.html(this.tpl_colours(s)); this.bind_colours(); }
 		else if (this.active_tab === "bom") { this.render_bom_tab($panels); }
 		else if (this.active_tab === "prodbom") { this.render_prodbom_tab($panels); }
+		else if (this.active_tab === "manufacturing") { this.render_manufacturing_tab($panels); }
 		else if (this.active_tab === "techpack") this.render_techpack_tab($panels);
 		else if (this.active_tab === "costing") { this.render_costing_tab($panels); }
 		else if (this.active_tab === "sampling") { this.render_sampling_tab($panels); }
@@ -579,7 +581,7 @@ class StyleWorkspace {
 					</div>
 					<div class="sw-card-b">
 						${matrix}
-						<div class="sw-note" style="margin-top:12px">SKU codes come from the style, colour and size codes. Generation is gated and happens on the Style BOM document (Style Confirmed, PP approved, Lab Dip approved per colourway) - clicking a pending cell takes you there.</div>
+						<div class="sw-note" style="margin-top:12px">SKU codes come from the style, colour and size codes. Production BOM generation requires a submitted Style BOM, a generation mode, and an Active colour approved for production - Style confirmation is not required.</div>
 					</div>
 				</div>
 			</div>
@@ -741,7 +743,7 @@ class StyleWorkspace {
 			// Submitted + mode chosen: the real thing can actually run, right
 			// here - no need to send the user to the Style BOM form at all.
 			frappe.confirm(
-				`Generate production BOMs and SKUs for every Active, Approved-for-Production colourway on ${frappe.utils.escape_html(this.style.style_no || this.style.name)} (mode: <b>${frappe.utils.escape_html(info.bom_generation_mode)}</b>)? Style Stage must be Confirmed first.`,
+				`Generate production BOMs and SKUs for every Active, Approved-for-Production colourway on ${frappe.utils.escape_html(this.style.style_no || this.style.name)} (mode: <b>${frappe.utils.escape_html(info.bom_generation_mode)}</b>)?`,
 				() => {
 					frappe.dom.freeze("Checking gates and generating…");
 					frappe.call({
@@ -770,7 +772,7 @@ class StyleWorkspace {
 				fieldtype: "Select",
 				options: "Per Colourway (Material-wise)\nPer SKU (Colour x Size)",
 				reqd: 1,
-				description: "Per Colourway: one shared BOM per colour, size-weighted average consumption. Per SKU: one exact BOM per colour x size, using that size's own consumption - plugs directly into the real sellable Item."
+				description: "Per SKU (recommended for manufacturing): one exact native ERPNext BOM per colour x size, attached to the sellable SKU Item for Production Plans and Work Orders. Per Colourway: one shared, size-weighted BOM per colour on a non-sellable carrier Item, for costing/planning only."
 			}],
 			primary_action_label: "Save & continue",
 			primary_action: (values) => {
@@ -884,7 +886,12 @@ class StyleWorkspace {
 					<div class="right">
 						<span class="sw-note" style="margin-right:8px">Only non-zero cells count as ordered - these drive BOM generation.</span>
 						${o.sales_order
-						? `<a href="#" class="sw-btn sw-btn-sm" id="swOpenSalesOrder" data-so="${frappe.utils.escape_html(o.sales_order)}">Sales Order ${frappe.utils.escape_html(o.sales_order)} →</a>`
+						? `<a href="#" class="sw-btn sw-btn-sm" id="swOpenSalesOrder" data-so="${frappe.utils.escape_html(o.sales_order)}">Sales Order ${frappe.utils.escape_html(o.sales_order)}${o.sales_order_docstatus === 1 ? "" : " · Draft"} →</a>
+							${o.production_plan
+								? `<a href="#" class="sw-btn sw-btn-sm" id="swOpenProductionPlan" data-plan="${frappe.utils.escape_html(o.production_plan)}">Production Plan ${frappe.utils.escape_html(o.production_plan)} →</a>`
+								: o.sales_order_docstatus === 1
+									? `<button class="sw-btn sw-btn-pri sw-btn-sm" id="swCreateProductionPlan">Create Production Plan</button>`
+									: `<span class="sw-note">Submit the Sales Order to create a Production Plan.</span>`}`
 						: `<button class="sw-btn sw-btn-sm" id="swCreateSalesOrder">Create Sales Order</button>`}
 						<button class="sw-btn sw-btn-sm" id="swOpenOrderForm">Open full record</button>
 					</div>
@@ -916,6 +923,26 @@ class StyleWorkspace {
 		$panels.find("#swOpenSalesOrder").on("click", (e) => {
 			e.preventDefault();
 			frappe.set_route("Form", "Sales Order", $(e.currentTarget).data("so"));
+		});
+		$panels.find("#swCreateProductionPlan").on("click", () => {
+			frappe.confirm(__("Create a draft ERPNext Production Plan from the submitted Sales Order? Review and submit the plan in ERPNext before creating Work Orders."), () => {
+				frappe.dom.freeze(__("Creating Production Plan…"));
+				frappe.call({
+					method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.create_production_plan_from_apparel_order",
+					args: { style: this.style.name },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						const plan = r.message.production_plan;
+						sw_toast(this.wrapper, `Production Plan ${plan} ${r.message.created ? "created as a draft" : "already exists"}.`);
+						frappe.set_route("Form", "Production Plan", plan);
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			});
+		});
+		$panels.find("#swOpenProductionPlan").on("click", (e) => {
+			e.preventDefault();
+			frappe.set_route("Form", "Production Plan", $(e.currentTarget).data("plan"));
 		});
 		$panels.find("#swOpenOrderForm").on("click", () => {
 			if (this.workspace_order && this.workspace_order.name) {
@@ -1777,7 +1804,7 @@ $panels.html(`
 				fields: [{
 					fieldname: "mode", label: "BOM Generation Mode", fieldtype: "Select",
 					options: "Per Colourway (Material-wise)\nPer SKU (Colour x Size)", reqd: 1,
-					description: "Per Colourway: one shared BOM per colour, size-weighted average consumption. Per SKU: one exact BOM per colour x size, attached to the real SKU Item."
+					description: "Per SKU (recommended for manufacturing): one exact native ERPNext BOM per colour x size, attached to the sellable SKU Item for Production Plans and Work Orders. Per Colourway: one shared, size-weighted BOM per colour on a non-sellable carrier Item, for costing/planning only."
 				}],
 				primary_action_label: "Save",
 				primary_action: (values) => {
@@ -1798,7 +1825,7 @@ $panels.html(`
 		});
 		$panels.find("#swGenerateProdBoms").on("click", () => {
 			const sb = this.workspace_prodbom.style_bom;
-			frappe.confirm(__("Generate production BOMs from Style BOM v{0}? This creates or updates real ERPNext BOMs for every active, approved-for-production colourway.", [sb.version]), () => {
+			frappe.confirm(__("Generate production BOMs from Style BOM v{0}? Per SKU mode creates native ERPNext BOMs attached to sellable Items for Manufacturing. Existing BOMs are left unchanged.", [sb.version]), () => {
 				frappe.dom.freeze("Generating…");
 				frappe.call({
 					method: "apparel_erp.product_development.doctype.style_bom.style_bom.generate_production_boms",
@@ -1807,6 +1834,145 @@ $panels.html(`
 						frappe.dom.unfreeze();
 						sw_toast(this.wrapper, `Generated ${r.message.count} production BOM(s).`);
 						this.render_prodbom_tab($panels);
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			});
+		});
+	}
+
+	render_manufacturing_tab($panels) {
+		$panels.html(`<div class="sw-loading">Loading Manufacturing links…</div>`);
+		frappe.call({
+			method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.get_workspace_manufacturing",
+			args: { style: this.style.name }
+		}).then((r) => {
+			this.workspace_manufacturing = r.message || { order: null, boms: [], work_orders: [] };
+			this.paint_manufacturing_tab($panels);
+		});
+	}
+
+	paint_manufacturing_tab($panels) {
+		const data = this.workspace_manufacturing || { order: null, boms: [], work_orders: [] };
+		const order = data.order;
+		const salesOrder = order && order.sales_order;
+		const plan = order && order.production_plan;
+		const boms = data.boms || [];
+		const workOrders = data.work_orders || [];
+
+		const statusPill = (doc) => {
+			if (!doc) return `<span class="sw-pill sw-pill-mut">Not created</span>`;
+			if (doc.docstatus === 2) return `<span class="sw-pill sw-pill-bad">Cancelled</span>`;
+			if (doc.docstatus === 0) return `<span class="sw-pill sw-pill-mut">Draft</span>`;
+			return `<span class="sw-pill sw-pill-ok">${frappe.utils.escape_html(doc.status || "Submitted")}</span>`;
+		};
+
+		const bomRows = boms.length
+			? boms.map((bom) => `
+				<tr>
+					<td>${frappe.utils.escape_html(bom.custom_colourway || "—")}</td>
+					<td>${frappe.utils.escape_html(bom.custom_size || "—")}</td>
+					<td><a href="#" class="sw-mfg-open" data-doctype="BOM" data-name="${frappe.utils.escape_html(bom.name)}">${frappe.utils.escape_html(bom.name)}</a></td>
+					<td>${frappe.utils.escape_html(bom.item || "")}<div class="sw-muted-sm">${frappe.utils.escape_html(bom.item_name || "")}</div></td>
+					<td>${bom.docstatus === 1 && bom.is_active ? `<span class="sw-pill sw-pill-ok">${bom.is_default ? "Active · Default" : "Active"}</span>` : statusPill(bom)}</td>
+				</tr>`).join("")
+			: `<tr><td colspan="5" class="sw-empty">No generated Production BOMs found for this Style.</td></tr>`;
+
+		const workOrderRows = workOrders.length
+			? workOrders.map((wo) => `
+				<tr>
+					<td><a href="#" class="sw-mfg-open" data-doctype="Work Order" data-name="${frappe.utils.escape_html(wo.name)}">${frappe.utils.escape_html(wo.name)}</a></td>
+					<td>${frappe.utils.escape_html(wo.production_item || "")}</td>
+					<td class="num">${frappe.format(wo.qty || 0, { fieldtype: "Float" })}</td>
+					<td class="num">${frappe.format(wo.produced_qty || 0, { fieldtype: "Float" })}</td>
+					<td>${statusPill(wo)}</td>
+				</tr>`).join("")
+			: `<tr><td colspan="5" class="sw-empty">No Work Orders linked to this Sales Order or Production Plan yet. Create them from the submitted Production Plan in ERPNext.</td></tr>`;
+
+		if (!order) {
+			$panels.html(`
+				<div class="sw-card">
+					<div class="sw-card-h"><h2>Manufacturing connection</h2></div>
+					<div class="sw-card-b">
+						<div class="sw-empty">Create an Apparel Order first. Its ordered SKUs can then flow through Sales Order → Production Plan → Work Orders.</div>
+						<button class="sw-btn sw-btn-pri" id="swOpenOrderTab">Open Order tab</button>
+					</div>
+					<div class="sw-card-b">
+						<h3>Production BOMs</h3>
+						<table class="sw-prodbom-table"><thead><tr><th>Colour</th><th>Size</th><th>BOM</th><th>Manufactured Item</th><th>Status</th></tr></thead><tbody>${bomRows}</tbody></table>
+					</div>
+				</div>`);
+			$panels.find("#swOpenOrderTab").on("click", () => this.switch_tab("order"));
+			return;
+		}
+
+		$panels.html(`
+			<div class="sw-card">
+				<div class="sw-card-h"><h2>Manufacturing connection</h2><div class="right">
+					<span class="sw-pill sw-pill-mut">Apparel Order ${frappe.utils.escape_html(order.name)}</span>
+					<button class="sw-btn sw-btn-sm" id="swRefreshManufacturing">Refresh</button>
+				</div></div>
+				<div class="sw-card-b">
+					<div class="sw-grid2">
+						<div class="sw-card">
+							<div class="sw-card-h"><h3>1. Production BOMs</h3><button class="sw-btn sw-btn-sm" id="swOpenProductionBoms">View all</button></div>
+							<div class="sw-card-b"><table class="sw-prodbom-table"><thead><tr><th>Colour</th><th>Size</th><th>BOM</th><th>Manufactured Item</th><th>Status</th></tr></thead><tbody>${bomRows}</tbody></table></div>
+						</div>
+						<div class="sw-card">
+							<div class="sw-card-h"><h3>2. ERPNext Sales Order</h3>${salesOrder
+								? `<button class="sw-btn sw-btn-sm sw-mfg-open" data-doctype="Sales Order" data-name="${frappe.utils.escape_html(salesOrder.name)}">Open ${frappe.utils.escape_html(salesOrder.name)} →</button>`
+								: `<button class="sw-btn sw-btn-pri sw-btn-sm" id="swCreateSalesOrder">Create Sales Order</button>`}</div>
+							<div class="sw-card-b">${salesOrder
+								? `<div>${statusPill(salesOrder)} <span class="sw-muted-sm">${frappe.utils.escape_html(salesOrder.status || "")}</span></div>`
+								: `<div class="sw-empty">No ERPNext Sales Order linked yet.</div>`}</div>
+						</div>
+					</div>
+					<div class="sw-card">
+						<div class="sw-card-h"><h3>3. ERPNext Production Plan</h3>${plan
+							? `<button class="sw-btn sw-btn-sm sw-mfg-open" data-doctype="Production Plan" data-name="${frappe.utils.escape_html(plan.name)}">Open ${frappe.utils.escape_html(plan.name)} →</button>`
+							: salesOrder && salesOrder.docstatus === 1
+								? `<button class="sw-btn sw-btn-pri sw-btn-sm" id="swCreateProductionPlan">Create draft Production Plan</button>`
+								: `<span class="sw-note">Submit the Sales Order first.</span>`}</div>
+						<div class="sw-card-b">${plan
+							? `<div>${statusPill(plan)}${plan.posting_date ? ` <span class="sw-muted-sm">${frappe.datetime.str_to_user(plan.posting_date)}</span>` : ""}${plan.total_planned_qty != null ? ` · ${frappe.format(plan.total_planned_qty, { fieldtype: "Float" })} planned` : ""}</div>`
+							: `<div class="sw-empty">No Production Plan linked yet. The app creates a draft for review; submit it in ERPNext before creating Work Orders.</div>`}</div>
+					</div>
+					<div class="sw-card">
+						<div class="sw-card-h"><h3>4. ERPNext Work Orders</h3><a class="sw-btn sw-btn-sm" href="#List/Work Order">Open Work Order list →</a></div>
+						<div class="sw-card-b"><table class="sw-prodbom-table"><thead><tr><th>Work Order</th><th>Item</th><th class="num">Planned Qty</th><th class="num">Produced Qty</th><th>Status</th></tr></thead><tbody>${workOrderRows}</tbody></table></div>
+					</div>
+				</div>
+			</div>`);
+
+		$panels.find(".sw-mfg-open").on("click", (e) => {
+			e.preventDefault();
+			frappe.set_route("Form", $(e.currentTarget).data("doctype"), $(e.currentTarget).data("name"));
+		});
+		$panels.find("#swOpenProductionBoms").on("click", () => this.switch_tab("prodbom"));
+		$panels.find("#swRefreshManufacturing").on("click", () => this.render_manufacturing_tab($panels));
+		$panels.find("#swCreateSalesOrder").on("click", () => {
+			frappe.confirm(__("Create an ERPNext Sales Order from the non-zero Apparel Order quantities? Every ordered colour-size needs a generated SKU."), () => {
+				frappe.dom.freeze(__("Creating Sales Order…"));
+				frappe.call({
+					method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.create_sales_order_from_apparel_order",
+					args: { style: this.style.name },
+					callback: () => {
+						frappe.dom.unfreeze();
+						this.render_manufacturing_tab($panels);
+					},
+					error: () => frappe.dom.unfreeze()
+				});
+			});
+		});
+		$panels.find("#swCreateProductionPlan").on("click", () => {
+			frappe.confirm(__("Create a draft ERPNext Production Plan from the submitted Sales Order? Review and submit it before creating Work Orders."), () => {
+				frappe.dom.freeze(__("Creating Production Plan…"));
+				frappe.call({
+					method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.create_production_plan_from_apparel_order",
+					args: { style: this.style.name },
+					callback: (r) => {
+						frappe.dom.unfreeze();
+						frappe.set_route("Form", "Production Plan", r.message.production_plan);
 					},
 					error: () => frappe.dom.unfreeze()
 				});

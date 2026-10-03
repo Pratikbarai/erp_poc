@@ -31,6 +31,8 @@ def _serialize(doc):
 		"delivery_date": doc.delivery_date,
 		"total_quantity": doc.total_quantity or 0,
 		"sales_order": doc.get("sales_order"),
+		"sales_order_docstatus": frappe.db.get_value("Sales Order", doc.sales_order, "docstatus") if doc.get("sales_order") else None,
+		"production_plan": doc.get("production_plan"),
 		"order_matrix": rows,
 	}
 
@@ -126,14 +128,7 @@ def get_ordered_combinations(style):
 	the filter the BOM Generator is meant to use per spec section 4 step 2
 	("use actual ordered color-size combinations; ignore zero-quantity
 	cells"), instead of generating for every colour x size row regardless
-	of whether anything was actually ordered.
-
-	Not yet wired into generate_production_boms - that function is under
-	active development elsewhere (Per Colourway / Per SKU modes). This is
-	the read-only data contract other code should call once that wiring
-	happens, so the two pieces of work can land independently without
-	conflicting.
-	"""
+	of whether anything was actually ordered."""
 	name = _latest_order_name(style)
 	if not name:
 		return []
@@ -210,3 +205,153 @@ def create_sales_order_from_apparel_order(style):
 	frappe.db.set_value("Apparel Order", order.name, "sales_order", so.name)
 	frappe.db.commit()
 	return {"sales_order": so.name, "created": True}
+
+
+@frappe.whitelist()
+def create_production_plan_from_apparel_order(style):
+	"""Create a draft ERPNext Production Plan for the Apparel Order's submitted
+	Sales Order, using ERPNext's own item/BOM selection logic. The plan remains
+	a draft for review; users submit it and create Work Orders through ERPNext."""
+	name = _latest_order_name(style)
+	if not name:
+		frappe.throw(_("No Apparel Order for {0}.").format(style))
+	if not frappe.has_permission("Production Plan", "create"):
+		frappe.throw(_("Not permitted to create a Production Plan"))
+
+	order = frappe.get_doc("Apparel Order", name)
+	if order.status == "Cancelled":
+		frappe.throw(_("{0} is cancelled.").format(order.name))
+	if not order.get("sales_order"):
+		frappe.throw(_("Create a Sales Order from this Apparel Order first."))
+
+	if order.get("production_plan"):
+		plan_status = frappe.db.get_value("Production Plan", order.production_plan, "docstatus")
+		if plan_status is not None and plan_status < 2:
+			return {"production_plan": order.production_plan, "created": False}
+
+	sales_order = frappe.get_doc("Sales Order", order.sales_order)
+	if sales_order.docstatus != 1:
+		frappe.throw(_(
+			"Sales Order {0} must be submitted before creating a Production Plan. "
+			"Open and submit it, then try again."
+		).format(sales_order.name))
+
+	missing_boms = [
+		row.item_code
+		for row in sales_order.items
+		if not frappe.db.exists(
+			"BOM",
+			{"item": row.item_code, "docstatus": 1, "is_active": 1},
+		)
+	]
+	if missing_boms:
+		frappe.throw(_(
+			"No active, submitted Production BOM was found for: {0}. "
+			"Generate Per-SKU production BOMs before creating the Production Plan."
+		).format(", ".join(sorted(set(missing_boms)))))
+
+	plan = frappe.new_doc("Production Plan")
+	plan.company = sales_order.company
+	plan.get_items_from = "Sales Order"
+	plan.posting_date = frappe.utils.today()
+	plan.append("sales_orders", {
+		"sales_order": sales_order.name,
+		"sales_order_date": sales_order.transaction_date,
+		"customer": sales_order.customer,
+		"grand_total": sales_order.base_grand_total,
+	})
+	plan.get_items()
+	if not plan.po_items:
+		frappe.throw(_(
+			"ERPNext found no remaining Sales Order items with active BOMs for Production. "
+			"Check that the Sales Order quantities are not already delivered or covered by Work Orders."
+		))
+
+	plan.insert(ignore_permissions=True)
+	frappe.db.set_value("Apparel Order", order.name, "production_plan", plan.name)
+	frappe.db.commit()
+	return {"production_plan": plan.name, "created": True}
+
+
+@frappe.whitelist()
+def get_workspace_manufacturing(style):
+	"""Return the ERPNext manufacturing documents connected to this style's
+	latest Apparel Order for the Style Workspace Manufacturing tab."""
+	style_doc = frappe.get_doc("Style", style)
+	if not frappe.has_permission("Style", "read", style_doc):
+		frappe.throw(_("Not permitted to read this Style"))
+
+	boms = []
+	if frappe.has_permission("BOM", "read"):
+		boms = frappe.get_list(
+			"BOM",
+			filters={"custom_style": style},
+			fields=[
+				"name", "item", "item_name", "custom_colourway", "custom_size",
+				"docstatus", "is_active", "is_default",
+			],
+			order_by="custom_colourway asc, custom_size asc",
+			limit_page_length=0,
+		)
+
+	order_name = _latest_order_name(style)
+	if not order_name:
+		return {"order": None, "boms": boms, "work_orders": []}
+
+	order = frappe.get_doc("Apparel Order", order_name)
+	if not frappe.has_permission("Apparel Order", "read", order):
+		frappe.throw(_("Not permitted to read this Apparel Order"))
+
+	sales_order = None
+	if order.get("sales_order") and frappe.has_permission("Sales Order", "read"):
+		sales_orders = frappe.get_list(
+			"Sales Order",
+			filters={"name": order.sales_order},
+			fields=["name", "docstatus", "status"],
+			limit_page_length=1,
+		)
+		sales_order = sales_orders[0] if sales_orders else None
+
+	production_plan = None
+	if order.get("production_plan") and frappe.has_permission("Production Plan", "read"):
+		production_plans = frappe.get_list(
+			"Production Plan",
+			filters={"name": order.production_plan},
+			fields=["name", "docstatus", "status", "posting_date", "total_planned_qty"],
+			limit_page_length=1,
+		)
+		production_plan = production_plans[0] if production_plans else None
+
+	work_orders = []
+	work_order_filters = []
+	if production_plan and frappe.has_permission("Work Order", "read"):
+		work_order_filters.append({"production_plan": production_plan.name})
+	if sales_order and frappe.has_permission("Work Order", "read"):
+		work_order_filters.append({"sales_order": sales_order.name})
+
+	seen_work_orders = set()
+	for filters in work_order_filters:
+		for work_order in frappe.get_list(
+			"Work Order",
+			filters=filters,
+			fields=[
+				"name", "production_item", "qty", "produced_qty", "status",
+				"docstatus", "production_plan", "sales_order",
+			],
+			order_by="creation desc",
+			limit_page_length=0,
+		):
+			if work_order.name not in seen_work_orders:
+				seen_work_orders.add(work_order.name)
+				work_orders.append(work_order)
+
+	return {
+		"order": {
+			"name": order.name,
+			"buyer_po": order.buyer_po,
+			"sales_order": sales_order,
+			"production_plan": production_plan,
+		},
+		"boms": boms,
+		"work_orders": work_orders,
+	}

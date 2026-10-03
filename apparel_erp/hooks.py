@@ -5,7 +5,7 @@ app_description = "Apparel PLM - Styles, Colour x Size matrix, auto SKU + BOM ge
 app_email = "admin@example.com"
 app_license = "MIT"
 app_version = "0.0.1"
-required_apps = ["frappe"]
+required_apps = ["frappe", "erpnext"]
 
 # Light navy/blue theming applied to standard desk forms (Style, Design Tech Pack, etc.)
 app_include_css = "/assets/apparel_erp/css/apparel_theme.css"
@@ -21,7 +21,7 @@ doctype_js = {
 # Data records shipped with the app - installed/updated on `bench migrate`
 fixtures = [
     {"doctype": "Print Format", "filters": [["name", "=", "Tech Pack Sheet"]]},
-    {"doctype": "Custom Field", "filters": [["dt", "=", "BOM"], ["fieldname", "in", ["custom_style", "custom_style_bom", "custom_style_bom_version", "custom_colourway"]]]},
+    {"doctype": "Custom Field", "filters": [["dt", "=", "BOM"], ["fieldname", "in", ["custom_style", "custom_style_bom", "custom_style_bom_version", "custom_colourway", "custom_size"]]]},
     {"doctype": "Observation Category"}
 ]
 
@@ -37,12 +37,12 @@ doc_events = {
     }
 }
 
-# Shows "Apparel ERP" as its own tile on the Frappe apps screen / home,
-# opening straight into the Style Workspace page (Frappe v15+/v16).
+# Shows "Apparel ERP" as its own tile with a dedicated brand icon on the
+# Frappe apps screen / home, opening straight into the Style Workspace page.
 add_to_apps_screen = [
     {
         "name": "apparel_erp",
-        "logo": "/assets/frappe/images/frappe-framework-logo.svg",
+        "logo": "/assets/apparel_erp/images/apparel_erp_logo.svg",
         "title": "Apparel ERP",
         "route": "/desk/style-workspace",
     }
