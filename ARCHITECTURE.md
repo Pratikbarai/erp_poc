@@ -95,7 +95,7 @@ The single most important consequence of this model: **`Style BOM` and `BOM` are
 
 ### 5.1 Tab dispatch
 
-One tab bar, ten tabs currently: `info`, `order`, `colours`, `bom`, `prodbom`, `techpack`, `costing`, `sampling`, `tna`, `jobwork`. Clicking a tab button triggers a click handler that calls a central dispatch (`render_panel()`-equivalent), which `if/else`s on `this.active_tab` to call the right `render_X_tab($panels)`. Each `render_X_tab` typically:
+One tab bar, twelve tabs currently: `info`, `order`, `colours`, `bom`, `prodbom`, `manufacturing`, `connections`, `techpack`, `costing`, `sampling`, `tna`, `jobwork`. Clicking a tab button triggers a click handler that calls a central dispatch (`render_panel()`-equivalent), which `if/else`s on `this.active_tab` to call the right `render_X_tab($panels)`. Each `render_X_tab` typically:
 1. Shows a loading placeholder,
 2. Fetches data via one or more `frappe.call`s to a whitelisted server method,
 3. Calls `paint_X_tab($panels)`, which builds the HTML string and calls `$panels.html(...)`,
@@ -164,7 +164,11 @@ Use **Per SKU (Colour x Size)** for production. `_build_sku_bom` sets the native
 
 For an order, generate the Per-SKU BOMs and SKUs, then use **Create Sales Order** on the Order tab and submit that Sales Order in ERPNext. Return to the Order tab and click **Create Production Plan**. The app creates and links a draft native ERPNext Production Plan using ERPNext's own `get_items()` logic to fetch the remaining Sales Order items and their BOMs. Review and submit the plan in ERPNext, then create Work Orders from the plan there. Plan creation is idempotent while the linked plan exists and is not cancelled.
 
-The Style Workspace's **Manufacturing** tab is the connection view: it lists the generated production BOMs, linked Sales Order, linked Production Plan, and Work Orders related to either document. It offers the Sales Order and draft Production Plan actions when those links have not been created yet. Work Orders remain created through ERPNext after the Production Plan is reviewed and submitted.
+On migrate, the app preserves ERPNext's Sales Order permissions and ensures the `Sales User` and `Manufacturing Manager` roles have Read, Write, Create, and Submit access so the workspace hand-off can create and submit the order. It does not grant Delete or Cancel. Production Plan and Work Order actions continue to use each user's normal ERPNext manufacturing permissions.
+
+The Style Workspace's **Manufacturing** tab is the production overview. **Connections** lists visible links to the Apparel Order, Sales Order, Production Plan, BOMs, Work Orders, and subcontracting records. **Job Work** reads ERPNext Subcontracting Orders linked by `production_plan` and their Subcontracting Receipts via receipt-item references. Purchase Orders, Subcontracting Orders, and Receipts are still created and submitted through ERPNext's native workflow. No external system connector is configured by this app.
+
+The Manufacturing tab offers the Sales Order and draft Production Plan actions when those links have not been created yet. Work Orders remain created through ERPNext after the Production Plan is reviewed and submitted.
 
 ### 6.5 Costing — extra item charge types
 
