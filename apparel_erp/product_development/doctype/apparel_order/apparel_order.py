@@ -425,3 +425,65 @@ def get_workspace_manufacturing(style):
 		"subcontracting_orders": subcontracting_orders,
 		"subcontracting_receipts": subcontracting_receipts,
 	}
+
+
+@frappe.whitelist()
+def get_job_work_purchase_orders(style):
+	"""Return submitted subcontracting Purchase Orders with remaining work for
+	the latest submitted Production Plan linked to this Style."""
+	style_doc = frappe.get_doc("Style", style)
+	if not frappe.has_permission("Style", "read", style_doc):
+		frappe.throw(_("Not permitted to read this Style"))
+
+	order_name = _latest_order_name(style)
+	if not order_name:
+		return []
+
+	order = frappe.get_doc("Apparel Order", order_name)
+	if not frappe.has_permission("Apparel Order", "read", order):
+		frappe.throw(_("Not permitted to read this Apparel Order"))
+	if not order.production_plan:
+		return []
+
+	plan = frappe.get_doc("Production Plan", order.production_plan)
+	if not frappe.has_permission("Production Plan", "read", plan):
+		frappe.throw(_("Not permitted to read this Production Plan"))
+	if plan.docstatus != 1:
+		return []
+	if not frappe.has_permission("Purchase Order", "read"):
+		frappe.throw(_("Not permitted to read Purchase Orders"))
+
+	subassembly_names = frappe.get_all(
+		"Production Plan Sub Assembly Item",
+		filters={"parent": plan.name},
+		pluck="name",
+	)
+	if not subassembly_names:
+		return []
+
+	po_items = frappe.get_all(
+		"Purchase Order Item",
+		filters={"production_plan_sub_assembly_item": ["in", subassembly_names]},
+		fields=["parent", "qty", "subcontracted_qty"],
+		limit_page_length=0,
+	)
+	eligible_po_names = {
+		row.parent
+		for row in po_items
+		if flt(row.qty) > flt(row.subcontracted_qty)
+	}
+	if not eligible_po_names:
+		return []
+
+	return frappe.get_list(
+		"Purchase Order",
+		filters={
+			"name": ["in", list(eligible_po_names)],
+			"docstatus": 1,
+			"is_subcontracted": 1,
+			"is_old_subcontracting_flow": 0,
+		},
+		fields=["name", "supplier", "supplier_name", "transaction_date"],
+		order_by="transaction_date desc",
+		limit_page_length=0,
+	)

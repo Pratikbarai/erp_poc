@@ -98,7 +98,7 @@ class StyleWorkspace {
 			{ label: "Purchasing", disabled: true },
 			{ label: "Job work", route: "List/Subcontracting Order" },
 			{ label: "Inventory", route: "List/Item" },
-			{ label: "Production", route: "List/BOM" },
+			{ label: "Manufacturing", route: "Workspaces/Manufacturing" },
 			{ label: "Quality", disabled: true },
 			{ sep: true },
 			{ label: "Reports", disabled: true },
@@ -230,7 +230,6 @@ class StyleWorkspace {
 					<button data-t="bom" class="${this.active_tab === "bom" ? "on" : ""}">Style BOM</button>
 					<button data-t="prodbom" class="${this.active_tab === "prodbom" ? "on" : ""}">Production BOM${this.prodbom_count ? `<span class="sw-count">${this.prodbom_count}</span>` : ""}</button>
 					<button data-t="manufacturing" class="${this.active_tab === "manufacturing" ? "on" : ""}">Manufacturing</button>
-					<button data-t="connections" class="${this.active_tab === "connections" ? "on" : ""}">Connections</button>
 					<button data-t="techpack" class="${this.active_tab === "techpack" ? "on" : ""}">Tech pack</button>
 					<button data-t="costing" class="${this.active_tab === "costing" ? "on" : ""}">Costing</button>
 					<button data-t="sampling" class="${this.active_tab === "sampling" ? "on" : ""}">Sampling${this.sampling_count ? `<span class="sw-count">${this.sampling_count}</span>` : ""}</button>
@@ -262,7 +261,6 @@ class StyleWorkspace {
 		else if (this.active_tab === "bom") { this.render_bom_tab($panels); }
 		else if (this.active_tab === "prodbom") { this.render_prodbom_tab($panels); }
 		else if (this.active_tab === "manufacturing") { this.render_manufacturing_tab($panels); }
-		else if (this.active_tab === "connections") { this.render_connections_tab($panels); }
 		else if (this.active_tab === "techpack") this.render_techpack_tab($panels);
 		else if (this.active_tab === "costing") { this.render_costing_tab($panels); }
 		else if (this.active_tab === "sampling") { this.render_sampling_tab($panels); }
@@ -1979,63 +1977,6 @@ $panels.html(`
 		});
 	}
 
-	render_connections_tab($panels) {
-		$panels.html(`<div class="sw-loading">Loading ERPNext connections…</div>`);
-		frappe.call({
-			method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.get_workspace_manufacturing",
-			args: { style: this.style.name }
-		}).then((r) => {
-			this.workspace_connections = r.message || { order: null, boms: [], work_orders: [], subcontracting_orders: [], subcontracting_receipts: [] };
-			this.paint_connections_tab($panels);
-		});
-	}
-
-	paint_connections_tab($panels) {
-		const data = this.workspace_connections || {};
-		const order = data.order;
-		const records = [];
-		const addRecord = (source, doctype, doc, status) => {
-			if (!doc) return;
-			const state = status || doc.status || (doc.docstatus === 1 ? "Submitted" : "Draft");
-			const stateClass = doc.docstatus === 2 ? "sw-pill-bad" : doc.docstatus === 1 ? "sw-pill-ok" : "sw-pill-mut";
-			records.push(`<tr>
-				<td>${frappe.utils.escape_html(source)}</td>
-				<td>${frappe.utils.escape_html(doctype)}</td>
-				<td><button type="button" class="sw-btn sw-btn-sm sw-connection-open" data-doctype="${frappe.utils.escape_html(doctype)}" data-name="${frappe.utils.escape_html(doc.name)}">${frappe.utils.escape_html(doc.name)} →</button></td>
-				<td><span class="sw-pill ${stateClass}">${frappe.utils.escape_html(state)}</span></td>
-			</tr>`);
-		};
-
-		addRecord("Order", "Apparel Order", order, order && order.status);
-		addRecord("Order", "Sales Order", order && order.sales_order);
-		addRecord("Planning", "Production Plan", order && order.production_plan);
-		(data.boms || []).forEach((bom) => addRecord("Product", "BOM", bom, bom.docstatus === 1 && bom.is_active ? "Active" : null));
-		(data.work_orders || []).forEach((wo) => addRecord("Production", "Work Order", wo));
-		(data.subcontracting_orders || []).forEach((doc) => addRecord("Job work", "Subcontracting Order", doc));
-		(data.subcontracting_receipts || []).forEach((doc) => addRecord("Job work", "Subcontracting Receipt", doc));
-
-		$panels.html(`
-			<div class="sw-card">
-				<div class="sw-card-h"><h2>ERPNext connections</h2><span class="sw-pill sw-pill-mut">${records.length} linked records</span></div>
-				<div class="sw-card-b">
-					${order ? `<p class="sw-muted-sm">Apparel Order ${frappe.utils.escape_html(order.name)} connects this Style to native ERPNext production documents.</p>` : `<div class="sw-empty">No Apparel Order is linked to this Style yet.</div>`}
-					<table class="sw-prodbom-table"><thead><tr><th>Flow</th><th>ERPNext DocType</th><th>Record</th><th>Status</th></tr></thead>
-					<tbody>${records.join("") || `<tr><td colspan="4" class="sw-empty">No linked ERPNext records are visible.</td></tr>`}</tbody></table>
-					${order ? `<button type="button" class="sw-btn sw-btn-sm" id="swConnectionsManufacturing">Open Manufacturing</button>` : ""}
-				</div>
-			</div>
-			<div class="sw-card">
-				<div class="sw-card-h"><h3>External integrations</h3><span class="sw-pill sw-pill-mut">Not configured</span></div>
-				<div class="sw-card-b"><div class="sw-empty">No external system is connected to this Style.</div></div>
-			</div>`);
-
-		$panels.off();
-		$panels.find(".sw-connection-open").on("click", (e) => {
-			frappe.set_route("Form", $(e.currentTarget).data("doctype"), $(e.currentTarget).data("name"));
-		});
-		$panels.find("#swConnectionsManufacturing").on("click", () => this.switch_tab("manufacturing"));
-	}
-
 	render_jobwork_tab($panels) {
 		$panels.html(`<div class="sw-loading">Loading subcontracting activity…</div>`);
 		frappe.call({
@@ -2044,6 +1985,15 @@ $panels.html(`
 		}).then((r) => {
 			this.workspace_jobwork = r.message || { order: null, subcontracting_orders: [], subcontracting_receipts: [] };
 			this.paint_jobwork_tab($panels);
+		}).catch(() => {
+			$panels.html(`
+				<div class="sw-card">
+					<div class="sw-card-b">
+						<div class="sw-empty">Could not load job work activity. Check your permissions and try again.</div>
+						<button type="button" class="sw-btn sw-btn-sm" id="swJobWorkRetry">Retry</button>
+					</div>
+				</div>`);
+			$panels.find("#swJobWorkRetry").on("click", () => this.render_jobwork_tab($panels));
 		});
 	}
 
@@ -2083,9 +2033,10 @@ $panels.html(`
 				<div class="sw-card-h"><h2>ERPNext Job Work</h2><div class="right">
 					${plan ? `<button type="button" class="sw-btn sw-btn-sm" id="swJobWorkPlan">Open Production Plan</button>` : `<button type="button" class="sw-btn sw-btn-sm" id="swJobWorkManufacturing">Open Manufacturing</button>`}
 					${plan && plan.docstatus === 1 && frappe.model.can_create("Subcontracting Order") ? `<button type="button" class="sw-btn sw-btn-pri sw-btn-sm" id="swJobWorkCreateOrder">Create Subcontracting Order</button>` : ""}
+					<button type="button" class="sw-btn sw-btn-sm" id="swJobWorkRefresh">Refresh</button>
 				</div></div>
 				<div class="sw-card-b">
-					<div class="sw-muted-sm">${plan && plan.docstatus !== 1 ? "Submit the Production Plan before creating job work." : "Create an order from a submitted subcontracting Purchase Order so ERPNext can map its items. Receipts are mapped from each submitted Subcontracting Order."}</div>
+					<div class="sw-muted-sm">${plan && plan.docstatus !== 1 ? "Submit the Production Plan before creating job work." : "Create an order from an eligible subcontracting Purchase Order linked to this Production Plan. Receipts are mapped from each submitted Subcontracting Order."}</div>
 					<h3>Subcontracting Orders ${subcontractingOrders.length ? `<span class="sw-count">${subcontractingOrders.length}</span>` : ""}</h3>
 					<table class="sw-prodbom-table"><thead><tr><th>Order</th><th>Job Worker</th><th>Purchase Order</th><th>Date</th><th class="num">Qty</th><th>Status</th></tr></thead><tbody>${orderRows}</tbody></table>
 				</div>
@@ -2116,8 +2067,55 @@ $panels.html(`
 		});
 		$panels.find("#swJobWorkPlan").on("click", () => frappe.set_route("Form", "Production Plan", plan.name));
 		$panels.find("#swJobWorkManufacturing").on("click", () => this.switch_tab("manufacturing"));
+		$panels.find("#swJobWorkRefresh").on("click", () => this.render_jobwork_tab($panels));
 		$panels.find("#swJobWorkCreateOrder").on("click", () => {
-			frappe.new_doc("Subcontracting Order", { production_plan: plan.name });
+			frappe.call({
+				method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.get_job_work_purchase_orders",
+				args: { style: this.style.name }
+			}).then((r) => {
+				const purchaseOrders = r.message || [];
+				if (!purchaseOrders.length) {
+					frappe.msgprint(__("No submitted subcontracting Purchase Orders with remaining quantities were found for this Production Plan."));
+					return;
+				}
+
+				const dialog = new frappe.ui.Dialog({
+					title: __("Create Subcontracting Order"),
+					fields: [{
+						fieldtype: "Select",
+						fieldname: "purchase_order",
+						label: __("Subcontracting Purchase Order"),
+						options: purchaseOrders.map((po) => po.name).join("\n"),
+						reqd: 1
+					}],
+					primary_action_label: __("Create Order"),
+					primary_action: (values) => {
+						dialog.hide();
+						frappe.dom.freeze(__("Preparing Subcontracting Order…"));
+						frappe.call({
+							method: "erpnext.buying.doctype.purchase_order.purchase_order.make_subcontracting_order",
+							args: { source_name: values.purchase_order },
+							callback: (mapped) => {
+								frappe.dom.unfreeze();
+								if (!mapped.message) {
+									frappe.msgprint(__("ERPNext did not return a Subcontracting Order for {0}.", [values.purchase_order]));
+									return;
+								}
+								const docs = frappe.model.sync(mapped.message);
+								if (!docs.length) {
+									frappe.msgprint(__("ERPNext returned an empty Subcontracting Order."));
+									return;
+								}
+								frappe.set_route("Form", docs[0].doctype, docs[0].name);
+							},
+							error: () => frappe.dom.unfreeze()
+						});
+					}
+				});
+				dialog.show();
+			}).catch(() => {
+				frappe.msgprint(__("Could not load subcontracting Purchase Orders for this Production Plan."));
+			});
 		});
 		$panels.find(".sw-jobwork-create-receipt").on("click", (e) => {
 			const sourceName = $(e.currentTarget).data("name");

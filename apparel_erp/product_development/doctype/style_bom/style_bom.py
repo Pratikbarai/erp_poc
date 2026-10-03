@@ -616,6 +616,7 @@ def _build_colour_bom(style_doc, sb, cw, colour_code, ratio):
 	bom.insert(ignore_permissions=True)
 	bom = _rename_to_production_name(bom, _production_bom_name(style_doc, colour_code))
 	if bom.docstatus == 0:
+		bom.flags.ignore_permissions = True
 		bom.submit()
 	return bom.name
 
@@ -678,6 +679,7 @@ def _build_sku_bom(style_doc, sb, cw, colour_code, size_code, sku_item):
 	bom.insert(ignore_permissions=True)
 	bom = _rename_to_production_name(bom, _production_bom_name(style_doc, colour_code, size_code))
 	if bom.docstatus == 0:
+		bom.flags.ignore_permissions = True
 		bom.submit()
 	return bom.name
 
