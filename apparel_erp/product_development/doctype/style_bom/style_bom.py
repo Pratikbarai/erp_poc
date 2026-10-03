@@ -242,9 +242,6 @@ def get_size_ratio(style_doc):
 # ---------------------------------------------------------------------------
 
 def assert_gates_passed(style_doc, sb):
-	if (style_doc.get("style_stage_status") or "Draft") != "Confirmed":
-		frappe.throw(_("Style {0} must be Confirmed (Style Stage Status) before generating production BOMs.").format(style_doc.name))
-
 	active_colourways = [c for c in style_doc.colours if (c.status or "Active") == "Active" and c.get("approved_for_production")]
 	if not active_colourways:
 		frappe.throw(_("No colourway is Active and Approved for Production."))
@@ -317,25 +314,31 @@ def generate_production_boms(style_bom_name):
 	# size quantities, not by every Active + Approved colourway/size -
 	# zero-quantity cells are ignored, matching the ST-1045 worked example
 	# (8 ordered combinations out of 16 possible -> 8 BOMs, not 16). A style
-	# with no Apparel Order yet falls back to the old "every active
-	# colourway" behaviour, so BOM generation still works before an order
-	# exists (early costing/development BOMs, samples, etc).
+	# with no usable ordered cells (no non-zero quantities, no active/
+	# approved ordered colourway, or no matching ordered size in Per SKU
+	# mode), falls back to the old "every active colourway" behaviour.
 	has_order = bool(frappe.db.exists("Apparel Order", {"style": style_doc.name}))
 	ordered = get_ordered_combinations(style_doc.name) if has_order else None
-	if ordered is not None and not ordered:
-		frappe.throw(_(
-			"{0} has an Apparel Order but no ordered (non-zero) colour x size quantities yet. "
-			"Add quantities on the Order tab before generating."
-		).format(style_doc.name))
-	ordered_colours = {o["colour_code"] for o in ordered} if ordered is not None else None
-	ordered_pairs = {(o["colour_code"], o["size_code"]) for o in ordered} if ordered is not None else None
-
-	if ordered_colours is not None:
-		active_colourways = [cw for cw in active_colourways if (cw.colour_code or cw.colour_name) in ordered_colours]
-		if not active_colourways:
-			frappe.throw(_(
-				"None of the ordered colourways on {0}'s Apparel Order are both Active and Approved for Production."
-			).format(style_doc.name))
+	ordered_pairs = None
+	if ordered:
+		active_colour_codes = {cw.colour_code or cw.colour_name for cw in active_colourways}
+		style_size_codes = {
+			frappe.db.get_value("Size", row.size, "size_code") or row.size
+			for row in style_doc.sizes
+		}
+		usable_ordered_pairs = {
+			(o["colour_code"], o["size_code"])
+			for o in ordered
+			if o["colour_code"] in active_colour_codes
+			and (mode != "Per SKU (Colour x Size)" or o["size_code"] in style_size_codes)
+		}
+		if usable_ordered_pairs:
+			ordered_pairs = usable_ordered_pairs
+			ordered_colours = {colour for colour, _size in usable_ordered_pairs}
+			active_colourways = [
+				cw for cw in active_colourways
+				if (cw.colour_code or cw.colour_name) in ordered_colours
+			]
 
 	generated = []
 	frappe.flags.in_style_bom_generation = True

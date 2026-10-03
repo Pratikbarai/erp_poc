@@ -10,7 +10,7 @@ A custom Frappe app (`apparel_erp`, single module: **Product Development**) that
 
 > Build apparel intelligence above ERPNext. Let ERPNext remain the execution and accounting truth.
 
-Concretely: this app owns *product development* (styles, tech packs, BOM recipes, costing, sampling, time & action) and hands off to **standard, unmodified ERPNext doctypes** — `Item` and `BOM` — for anything that needs to actually be manufactured. The only ERPNext core doctype this app touches at all is `BOM`, and only via four `Custom Field`s (`custom_style`, `custom_style_bom`, `custom_style_bom_version`, `custom_colourway`) plus one `validate` hook. Everything else is either a brand-new custom doctype or plain `Item` creation through normal Frappe APIs.
+Concretely: this app owns *product development* (styles, tech packs, BOM recipes, costing, sampling, time & action) and hands off to **standard, unmodified ERPNext doctypes** — `Item` and `BOM` — for anything that needs to actually be manufactured. ERPNext is a required app. This app adds five traceability fields to ERPNext's `BOM` (`custom_style`, `custom_style_bom`, `custom_style_bom_version`, `custom_colourway`, `custom_size`) plus one `validate` hook. Per-SKU BOMs attach to sellable Items and can be selected in ERPNext Production Plans and Work Orders; Per-Colourway BOMs attach to non-sellable carrier Items and are for costing/planning only.
 
 ## 2. Where everything lives
 
@@ -18,7 +18,7 @@ Concretely: this app owns *product development* (styles, tech packs, BOM recipes
 apparel_erp/
 ├── hooks.py                          # fixtures + the one doc_event hook on BOM
 ├── fixtures/
-│   ├── custom_field.json             # the 4 custom fields added to ERPNext's BOM
+│   ├── custom_field.json             # the 5 custom fields added to ERPNext's BOM
 │   └── observation_category.json     # seed data for Sampling's observation taxonomy
 └── product_development/              # the one module - everything lives here
     ├── doctype/                      # ~34 doctypes, see the table below
@@ -42,7 +42,7 @@ This is the mental model everything else follows:
 |---|---|---|
 | **1. Product Development** | Style identity, tech pack, BOM *recipe*, costing, sampling | `Style`, `Design Tech Pack`, `Style BOM`, `Style Cost Sheet`, `Sample Plan`/`Sample Stage`/`Sample Version` |
 | **2. Order Pre-Production** | Buyer PO, order matrix, T&A | `Apparel Order`, `Style TNA` |
-| **3. ERPNext Manufacturing** | Executable, standard ERPNext records | `Item`, `BOM` (native, untouched except 4 custom fields) |
+| **3. ERPNext Manufacturing** | Executable, standard ERPNext records | `Item`, `BOM` (native, extended with 5 traceability fields) |
 
 The single most important consequence of this model: **`Style BOM` and `BOM` are deliberately two different things.** Style BOM is a recipe — a rule set that says "fabric varies by colour, fusing varies by size" — and it's meant to be edited freely, over and over, as development progresses. `BOM` (ERPNext's own doctype) is the *resolved, executable* output: one real BOM per colourway (or per SKU), generated *from* a Style BOM, then locked. Never confuse "editing the Style BOM" with "editing a generated production BOM" — the system enforces this distinction in code (see §6.3).
 
@@ -147,28 +147,36 @@ Add a colour via the Workspace → `add_colour()` dialog → must have "Approved
 
 Entry point: `generate_production_boms(style_bom_name)` in `style_bom.py`. In order:
 
-1. **Gates** (`assert_gates_passed`): `Style.style_stage_status` must be `Confirmed`; at least one colourway must be Active + `approved_for_production`. (PP/Lab Dip approval gates existed earlier and were deliberately removed — don't re-add them without being asked.)
-2. **Per colourway loop** (`_generate_or_branch`, called once per colourway in Per Colourway mode, once per colourway×size in Per SKU mode):
+1. **Gates** (`assert_gates_passed`): at least one colourway must be Active + `approved_for_production`. Style lifecycle status does not gate production BOM generation. (PP/Lab Dip approval gates existed earlier and were deliberately removed — don't re-add them without being asked.)
+2. **Order filter and generation loop**: non-zero Apparel Order cells restrict generation when they match an Active + Approved-for-Production colourway (and, in Per SKU mode, a configured size). If the order has no non-zero cells or none match eligible colourways/sizes, generation falls back to all Active + Approved-for-Production colourways/SKUs rather than blocking generation. `_generate_or_branch` is called once per eligible colourway in Per Colourway mode, once per eligible colourway×size in Per SKU mode:
    - Look for an existing non-cancelled BOM already tagged with this `custom_style`+`custom_colourway`(+`custom_size`). **If one exists, it is returned untouched — production BOMs are generated exactly once.** To replace one, cancel it explicitly first (frees the slot for the next run).
-   - Otherwise, build fresh: `_build_colour_bom` (weighted-average consumption across sizes, attached to a synthetic non-sellable "carrier" Item) or `_build_sku_bom` (exact consumption for one specific size, attached to the real sellable SKU Item — created via `sync_matrix_for_sku_bom` in `style.py`).
+   - Otherwise, build fresh: `_build_colour_bom` (weighted-average consumption across sizes, attached to a synthetic non-sellable "carrier" Item) or `_build_sku_bom` (exact consumption for one specific size, attached to the real sellable SKU Item — created via `sync_matrix_for_sku_bom` in `style.py`). Use Per SKU for ERPNext Production Plans and Work Orders; the shared carrier-item BOM is not a sellable production item.
    - **Rename** the newly-inserted BOM from ERPNext's default autoname to `Production-{style_no}-{colour}[-{size}]` via `_rename_to_production_name` — uses the internal `frappe.model.rename_doc.rename_doc` (not the whitelisted `frappe.rename_doc` alias, which doesn't accept the permission-bypass this needs on v16), with `append_number_if_name_exists` disambiguating collisions.
    - Submit — but only if the doc is still a Draft (the rename's collision-handling path can return an *already-submitted* existing doc; submitting that again would throw).
 3. **Lock forever**: `guard_generated_bom_readonly` (a `validate` hook on native `BOM`, registered in `hooks.py`) blocks any edit to a BOM carrying `custom_style_bom` unless the write is coming from inside the generator itself (`frappe.flags.in_style_bom_generation`). This is what actually makes "generated once" mean something — it's not just that regeneration is a no-op, the record itself can't be hand-edited afterward either.
 4. **Log**: `write_generation_log` / `_write_variance_register` write one `Style BOM Generation Log` row per colourway per run (including "already generated, skipped" rows).
 
-Two generation modes, real trade-off, see the doctype's own `bom_generation_mode` field description for the exact wording merchandisers see. Short version: Per Colourway is fewer documents but averaged (materially inaccurate) consumption on a non-sellable carrier item; Per SKU is exact consumption on the real SKU, more documents. No default — must be chosen.
+Two generation modes, real trade-off, see the doctype's own `bom_generation_mode` field description for the exact wording merchandisers see. Short version: Per Colourway is fewer documents but averaged consumption on a non-sellable carrier item; Per SKU is exact consumption on the real SKU and is the path integrated with ERPNext Manufacturing. No default — must be chosen.
 
-### 6.4 Costing — extra item charge types
+### 6.4 ERPNext Manufacturing hand-off
+
+Use **Per SKU (Colour x Size)** for production. `_build_sku_bom` sets the native ERPNext BOM's `item` to the sellable SKU Item, marks it active and default, and submits it. This native Item/BOM relationship is what ERPNext Production Plans and Work Orders use; no custom Production Plan or Work Order doctype is involved.
+
+For an order, generate the Per-SKU BOMs and SKUs, then use **Create Sales Order** on the Order tab and submit that Sales Order in ERPNext. Return to the Order tab and click **Create Production Plan**. The app creates and links a draft native ERPNext Production Plan using ERPNext's own `get_items()` logic to fetch the remaining Sales Order items and their BOMs. Review and submit the plan in ERPNext, then create Work Orders from the plan there. Plan creation is idempotent while the linked plan exists and is not cancelled.
+
+The Style Workspace's **Manufacturing** tab is the connection view: it lists the generated production BOMs, linked Sales Order, linked Production Plan, and Work Orders related to either document. It offers the Sales Order and draft Production Plan actions when those links have not been created yet. Work Orders remain created through ERPNext after the Production Plan is reviewed and submitted.
+
+### 6.5 Costing — extra item charge types
 
 `compute_extra_item_amounts(doc, net_total)` in `style_cost_sheet.py` resolves each `Style Cost Sheet Extra Item` row strictly top-to-bottom (a row can only reference a row *above* it, never itself or below — prevents circular refs). Five types, mirroring ERPNext's own tax/charge pattern: Actual (typed value), On Net Total (% of fabric+trims+CMT+testing), On Previous Row Amount (% of one specific earlier row's own resolved amount), On Previous Row Total (% of the running total through that row), On Item Quantity (rate × 1, since this sheet is entirely per-piece). The client-side live preview in `recalc_costing_preview` mirrors this exact algorithm in JS so what you see before saving matches what gets persisted.
 
-### 6.5 Tech Pack annotation
+### 6.6 Tech Pack annotation
 
 Front/back sketch pins were the original feature; reference images (unlimited, camera-capturable) got the same treatment later, reusing the same `.sw-pin`/`.sw-flat-wrap` CSS and the same click-to-place interaction — deliberately *not* forked into a separate component. A `Tech Pack Callout` row belongs either to `sketch` (Front/Back) or to `reference_image` (a specific photo's row name); when filtering which pins belong to the Front sketch, you must exclude rows with `reference_image` set, or a photo's pins will wrongly also render on the Front sketch (this was a real bug, fixed — see the filter in `tpl_techpack`).
 
 The Sampling module's photo pin annotation (§4, Sample Photo/Sample Observation) is the same pattern again, a third time, independently implemented for a different doctype pair. If you're touching pin annotation logic, check whether the fix belongs in all three places (Front/Back, Tech Pack reference images, Sample photos) — they don't share code, only a UI pattern.
 
-### 6.6 Time & Action auto-fetch + Gantt
+### 6.7 Time & Action auto-fetch + Gantt
 
 `get_workspace_tna` silently reconciles three fixed milestones (`AUTO_TNA_MILESTONES` in `style_tna.py`: Design & Tech Pack completed, Costing submitted, Sampling SKUs generated) against real state elsewhere in the workspace, every time the T&A tab loads — no manual "fetch" button, it just happens. Each milestone is matched to its `Style TNA Activity` row via `source_reference` (a stable machine key), so re-running it finds the same row again rather than duplicating it, and it only ever marks a milestone *done*, never un-marks one (a later regression, e.g. a cancelled costing, doesn't erase T&A history). The Gantt view (`render_tna_gantt`) is a from-scratch HTML/CSS timeline, not Frappe's bundled Gantt library — deliberately, to avoid an extra asset load for one view toggle.
 
@@ -219,4 +227,4 @@ From the Sampling module spec, milestones M3 (partial) and M4 were explicitly sc
 - Draggable pins: **not built** — delete and re-place instead of drag.
 - Mobile QR-code capture route (`/sample/capture/<version>`, scan a physical tag → camera opens directly, no navigation): **not built**. Camera capture exists, but through the main Workspace UI on a phone browser, not a standalone route.
 - External sharing (`Sample Share`, WhatsApp composite send, guest portal, token-based access): **not built at all** (M4).
-- `Apparel Order` → `Sales Order` / `Production Plan` hand-off: **not built**. `Apparel Order` exists and captures the order matrix, but nothing downstream consumes it into standard ERPNext planning yet.
+- Automatic Work Order creation: **not built**. The Order tab can create a standard ERPNext Sales Order and a draft Production Plan from its submitted Sales Order. A user reviews/submits the plan and creates Work Orders in standard ERPNext Manufacturing.

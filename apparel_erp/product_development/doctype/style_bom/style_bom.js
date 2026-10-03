@@ -18,7 +18,7 @@ frappe.ui.form.on("Style BOM", {
 
 function generate_production_boms(frm) {
 	frappe.confirm(
-		__("Generate production BOMs for every Active, Approved-for-Production colourway on {0}? Gates (Style Confirmed, PP approval, Lab Dip approvals) will be checked first.", [frm.doc.style]),
+		__("Generate production BOMs using the selected generation mode for active, approved-for-production colourways on {0}?", [frm.doc.style]),
 		() => {
 			frappe.dom.freeze(__("Checking gates and generating..."));
 			frappe.call({
@@ -28,7 +28,7 @@ function generate_production_boms(frm) {
 					frappe.dom.unfreeze();
 					if (r.message) {
 						frappe.show_alert({
-							message: __("Generated/confirmed {0} BOM(s), one per colourway.", [r.message.count]),
+							message: __("Generated or confirmed {0} BOM(s). Per SKU BOMs are attached to sellable Items for ERPNext Manufacturing.", [r.message.count]),
 							indicator: "green"
 						});
 						frm.reload_doc().then(() => render_generation_log(frm));
