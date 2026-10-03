@@ -296,7 +296,13 @@ def get_workspace_manufacturing(style):
 
 	order_name = _latest_order_name(style)
 	if not order_name:
-		return {"order": None, "boms": boms, "work_orders": []}
+		return {
+			"order": None,
+			"boms": boms,
+			"work_orders": [],
+			"subcontracting_orders": [],
+			"subcontracting_receipts": [],
+		}
 
 	order = frappe.get_doc("Apparel Order", order_name)
 	if not frappe.has_permission("Apparel Order", "read", order):
@@ -345,13 +351,49 @@ def get_workspace_manufacturing(style):
 				seen_work_orders.add(work_order.name)
 				work_orders.append(work_order)
 
+	subcontracting_orders = []
+	subcontracting_receipts = []
+	if production_plan and frappe.has_permission("Subcontracting Order", "read"):
+		subcontracting_orders = frappe.get_list(
+			"Subcontracting Order",
+			filters={"production_plan": production_plan.name},
+			fields=[
+				"name", "supplier", "supplier_name", "status", "docstatus",
+				"purchase_order", "production_plan", "transaction_date", "total_qty",
+			],
+			order_by="creation desc",
+			limit_page_length=0,
+		)
+		if subcontracting_orders and frappe.has_permission("Subcontracting Receipt", "read"):
+			subcontracting_order_names = [row.name for row in subcontracting_orders]
+			receipt_names = {
+				row.parent
+				for row in frappe.get_all(
+					"Subcontracting Receipt Item",
+					filters={"subcontracting_order": ["in", subcontracting_order_names]},
+					fields=["parent"],
+					limit_page_length=0,
+				)
+			}
+			if receipt_names:
+				subcontracting_receipts = frappe.get_list(
+					"Subcontracting Receipt",
+					filters={"name": ["in", list(receipt_names)]},
+					fields=["name", "supplier", "supplier_name", "status", "docstatus", "posting_date", "total_qty"],
+					order_by="posting_date desc, creation desc",
+					limit_page_length=0,
+				)
+
 	return {
 		"order": {
 			"name": order.name,
 			"buyer_po": order.buyer_po,
+			"status": order.status,
 			"sales_order": sales_order,
 			"production_plan": production_plan,
 		},
 		"boms": boms,
 		"work_orders": work_orders,
+		"subcontracting_orders": subcontracting_orders,
+		"subcontracting_receipts": subcontracting_receipts,
 	}

@@ -96,7 +96,7 @@ class StyleWorkspace {
 			{ sep: true },
 			{ label: "Time & action", disabled: true },
 			{ label: "Purchasing", disabled: true },
-			{ label: "Job work", disabled: true },
+			{ label: "Job work", route: "List/Subcontracting Order" },
 			{ label: "Inventory", route: "List/Item" },
 			{ label: "Production", route: "List/BOM" },
 			{ label: "Quality", disabled: true },
@@ -230,6 +230,7 @@ class StyleWorkspace {
 					<button data-t="bom" class="${this.active_tab === "bom" ? "on" : ""}">Style BOM</button>
 					<button data-t="prodbom" class="${this.active_tab === "prodbom" ? "on" : ""}">Production BOM${this.prodbom_count ? `<span class="sw-count">${this.prodbom_count}</span>` : ""}</button>
 					<button data-t="manufacturing" class="${this.active_tab === "manufacturing" ? "on" : ""}">Manufacturing</button>
+					<button data-t="connections" class="${this.active_tab === "connections" ? "on" : ""}">Connections</button>
 					<button data-t="techpack" class="${this.active_tab === "techpack" ? "on" : ""}">Tech pack</button>
 					<button data-t="costing" class="${this.active_tab === "costing" ? "on" : ""}">Costing</button>
 					<button data-t="sampling" class="${this.active_tab === "sampling" ? "on" : ""}">Sampling${this.sampling_count ? `<span class="sw-count">${this.sampling_count}</span>` : ""}</button>
@@ -261,14 +262,12 @@ class StyleWorkspace {
 		else if (this.active_tab === "bom") { this.render_bom_tab($panels); }
 		else if (this.active_tab === "prodbom") { this.render_prodbom_tab($panels); }
 		else if (this.active_tab === "manufacturing") { this.render_manufacturing_tab($panels); }
+		else if (this.active_tab === "connections") { this.render_connections_tab($panels); }
 		else if (this.active_tab === "techpack") this.render_techpack_tab($panels);
 		else if (this.active_tab === "costing") { this.render_costing_tab($panels); }
 		else if (this.active_tab === "sampling") { this.render_sampling_tab($panels); }
 		else if (this.active_tab === "tna") { this.render_tna_tab($panels); }
-		else if (this.active_tab === "jobwork") $panels.html(this.tpl_preview_tab(
-			"Job work isn't wired to a doctype yet.",
-			"This tab is a styled placeholder. Add a Job Work / Subcontracting doctype and this page can show real cut plans, dispatch, and receipts here."
-		));
+		else if (this.active_tab === "jobwork") { this.render_jobwork_tab($panels); }
 	}
 
 	// ---------- Style information ----------
@@ -1980,6 +1979,129 @@ $panels.html(`
 		});
 	}
 
+	render_connections_tab($panels) {
+		$panels.html(`<div class="sw-loading">Loading ERPNext connections…</div>`);
+		frappe.call({
+			method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.get_workspace_manufacturing",
+			args: { style: this.style.name }
+		}).then((r) => {
+			this.workspace_connections = r.message || { order: null, boms: [], work_orders: [], subcontracting_orders: [], subcontracting_receipts: [] };
+			this.paint_connections_tab($panels);
+		});
+	}
+
+	paint_connections_tab($panels) {
+		const data = this.workspace_connections || {};
+		const order = data.order;
+		const records = [];
+		const addRecord = (source, doctype, doc, status) => {
+			if (!doc) return;
+			const state = status || doc.status || (doc.docstatus === 1 ? "Submitted" : "Draft");
+			const stateClass = doc.docstatus === 2 ? "sw-pill-bad" : doc.docstatus === 1 ? "sw-pill-ok" : "sw-pill-mut";
+			records.push(`<tr>
+				<td>${frappe.utils.escape_html(source)}</td>
+				<td>${frappe.utils.escape_html(doctype)}</td>
+				<td><button type="button" class="sw-btn sw-btn-sm sw-connection-open" data-doctype="${frappe.utils.escape_html(doctype)}" data-name="${frappe.utils.escape_html(doc.name)}">${frappe.utils.escape_html(doc.name)} →</button></td>
+				<td><span class="sw-pill ${stateClass}">${frappe.utils.escape_html(state)}</span></td>
+			</tr>`);
+		};
+
+		addRecord("Order", "Apparel Order", order, order && order.status);
+		addRecord("Order", "Sales Order", order && order.sales_order);
+		addRecord("Planning", "Production Plan", order && order.production_plan);
+		(data.boms || []).forEach((bom) => addRecord("Product", "BOM", bom, bom.docstatus === 1 && bom.is_active ? "Active" : null));
+		(data.work_orders || []).forEach((wo) => addRecord("Production", "Work Order", wo));
+		(data.subcontracting_orders || []).forEach((doc) => addRecord("Job work", "Subcontracting Order", doc));
+		(data.subcontracting_receipts || []).forEach((doc) => addRecord("Job work", "Subcontracting Receipt", doc));
+
+		$panels.html(`
+			<div class="sw-card">
+				<div class="sw-card-h"><h2>ERPNext connections</h2><span class="sw-pill sw-pill-mut">${records.length} linked records</span></div>
+				<div class="sw-card-b">
+					${order ? `<p class="sw-muted-sm">Apparel Order ${frappe.utils.escape_html(order.name)} connects this Style to native ERPNext production documents.</p>` : `<div class="sw-empty">No Apparel Order is linked to this Style yet.</div>`}
+					<table class="sw-prodbom-table"><thead><tr><th>Flow</th><th>ERPNext DocType</th><th>Record</th><th>Status</th></tr></thead>
+					<tbody>${records.join("") || `<tr><td colspan="4" class="sw-empty">No linked ERPNext records are visible.</td></tr>`}</tbody></table>
+					${order ? `<button type="button" class="sw-btn sw-btn-sm" id="swConnectionsManufacturing">Open Manufacturing</button>` : ""}
+				</div>
+			</div>
+			<div class="sw-card">
+				<div class="sw-card-h"><h3>External integrations</h3><span class="sw-pill sw-pill-mut">Not configured</span></div>
+				<div class="sw-card-b"><div class="sw-empty">No external system is connected to this Style.</div></div>
+			</div>`);
+
+		$panels.off();
+		$panels.find(".sw-connection-open").on("click", (e) => {
+			frappe.set_route("Form", $(e.currentTarget).data("doctype"), $(e.currentTarget).data("name"));
+		});
+		$panels.find("#swConnectionsManufacturing").on("click", () => this.switch_tab("manufacturing"));
+	}
+
+	render_jobwork_tab($panels) {
+		$panels.html(`<div class="sw-loading">Loading subcontracting activity…</div>`);
+		frappe.call({
+			method: "apparel_erp.product_development.doctype.apparel_order.apparel_order.get_workspace_manufacturing",
+			args: { style: this.style.name }
+		}).then((r) => {
+			this.workspace_jobwork = r.message || { order: null, subcontracting_orders: [], subcontracting_receipts: [] };
+			this.paint_jobwork_tab($panels);
+		});
+	}
+
+	paint_jobwork_tab($panels) {
+		const data = this.workspace_jobwork || {};
+		const order = data.order;
+		const plan = order && order.production_plan;
+		const subcontractingOrders = data.subcontracting_orders || [];
+		const receipts = data.subcontracting_receipts || [];
+		const statusPill = (doc) => {
+			if (doc.docstatus === 2) return `<span class="sw-pill sw-pill-bad">Cancelled</span>`;
+			if (doc.docstatus === 0) return `<span class="sw-pill sw-pill-mut">Draft</span>`;
+			return `<span class="sw-pill sw-pill-ok">${frappe.utils.escape_html(doc.status || "Submitted")}</span>`;
+		};
+		const orderRows = subcontractingOrders.length ? subcontractingOrders.map((doc) => `
+			<tr>
+				<td><button type="button" class="sw-btn sw-btn-sm sw-jobwork-open" data-doctype="Subcontracting Order" data-name="${frappe.utils.escape_html(doc.name)}">${frappe.utils.escape_html(doc.name)} →</button></td>
+				<td>${frappe.utils.escape_html(doc.supplier_name || doc.supplier || "")}</td>
+				<td>${doc.purchase_order ? `<button type="button" class="sw-btn sw-btn-sm sw-jobwork-open" data-doctype="Purchase Order" data-name="${frappe.utils.escape_html(doc.purchase_order)}">${frappe.utils.escape_html(doc.purchase_order)}</button>` : "—"}</td>
+				<td>${doc.transaction_date ? frappe.datetime.str_to_user(doc.transaction_date) : "—"}</td>
+				<td class="num">${frappe.format(doc.total_qty || 0, { fieldtype: "Float" })}</td>
+				<td>${statusPill(doc)}</td>
+			</tr>`).join("") : `<tr><td colspan="6" class="sw-empty">${plan ? "No Subcontracting Orders linked to this Production Plan." : "Create a Production Plan before starting ERPNext subcontracting."}</td></tr>`;
+		const receiptRows = receipts.length ? receipts.map((doc) => `
+			<tr>
+				<td><button type="button" class="sw-btn sw-btn-sm sw-jobwork-open" data-doctype="Subcontracting Receipt" data-name="${frappe.utils.escape_html(doc.name)}">${frappe.utils.escape_html(doc.name)} →</button></td>
+				<td>${frappe.utils.escape_html(doc.supplier_name || doc.supplier || "")}</td>
+				<td>${doc.posting_date ? frappe.datetime.str_to_user(doc.posting_date) : "—"}</td>
+				<td class="num">${frappe.format(doc.total_qty || 0, { fieldtype: "Float" })}</td>
+				<td>${statusPill(doc)}</td>
+			</tr>`).join("") : `<tr><td colspan="5" class="sw-empty">No Subcontracting Receipts linked to this Style's Production Plan.</td></tr>`;
+
+		$panels.html(`
+			<div class="sw-card">
+				<div class="sw-card-h"><h2>ERPNext Job Work</h2><div class="right">
+					${plan ? `<button type="button" class="sw-btn sw-btn-sm" id="swJobWorkPlan">Open Production Plan</button>` : `<button type="button" class="sw-btn sw-btn-sm" id="swJobWorkManufacturing">Open Manufacturing</button>`}
+					<button type="button" class="sw-btn sw-btn-sm" id="swJobWorkPurchaseOrders">Purchase Orders</button>
+				</div></div>
+				<div class="sw-card-b">
+					<div class="sw-muted-sm">Subcontracting Orders are linked through the ERPNext Production Plan; material receipts remain native Subcontracting Receipts.</div>
+					<h3>Subcontracting Orders ${subcontractingOrders.length ? `<span class="sw-count">${subcontractingOrders.length}</span>` : ""}</h3>
+					<table class="sw-prodbom-table"><thead><tr><th>Order</th><th>Job Worker</th><th>Purchase Order</th><th>Date</th><th class="num">Qty</th><th>Status</th></tr></thead><tbody>${orderRows}</tbody></table>
+				</div>
+				<div class="sw-card-b">
+					<h3>Subcontracting Receipts ${receipts.length ? `<span class="sw-count">${receipts.length}</span>` : ""}</h3>
+					<table class="sw-prodbom-table"><thead><tr><th>Receipt</th><th>Job Worker</th><th>Date</th><th class="num">Received Qty</th><th>Status</th></tr></thead><tbody>${receiptRows}</tbody></table>
+				</div>
+			</div>`);
+
+		$panels.off();
+		$panels.find(".sw-jobwork-open").on("click", (e) => {
+			frappe.set_route("Form", $(e.currentTarget).data("doctype"), $(e.currentTarget).data("name"));
+		});
+		$panels.find("#swJobWorkPlan").on("click", () => frappe.set_route("Form", "Production Plan", plan.name));
+		$panels.find("#swJobWorkManufacturing").on("click", () => this.switch_tab("manufacturing"));
+		$panels.find("#swJobWorkPurchaseOrders").on("click", () => frappe.set_route("List", "Purchase Order"));
+	}
+
 	// ---------- Sampling ----------
 	render_sampling_tab($panels) {
 		$panels.html(`<div class="sw-loading">Loading sampling…</div>`);
@@ -3388,20 +3510,6 @@ $panels.html(`
 			},
 			error: () => frappe.dom.unfreeze()
 		});
-	}
-
-	// ---------- generic preview tab (tna / jobwork) ----------
-	tpl_preview_tab(title, body) {
-		return `
-			<div class="sw-banner sw-banner-bad">
-				<span><b>${title}</b> ${body}</span>
-			</div>
-			<div class="sw-card">
-				<div class="sw-card-b">
-					<div class="sw-empty">This tab intentionally shows nothing live — connect a doctype to bring it to life, following the same pattern as the Colours &amp; Sizes and Tech pack tabs on this page.</div>
-				</div>
-			</div>
-		`;
 	}
 
 	close_drawer() {

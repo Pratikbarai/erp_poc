@@ -25,6 +25,35 @@ fixtures = [
     {"doctype": "Observation Category"}
 ]
 
+after_migrate = "apparel_erp.hooks.setup_sales_order_permissions"
+
+
+def setup_sales_order_permissions():
+    import frappe
+
+    if not frappe.db.exists("DocType", "Sales Order"):
+        return
+
+    for role in ("Sales User", "Manufacturing Manager"):
+        if not frappe.db.exists("Role", role):
+            continue
+
+        filters = {
+            "parent": "Sales Order",
+            "role": role,
+            "permlevel": 0,
+            "if_owner": 0,
+        }
+        if not frappe.db.exists("Custom DocPerm", filters):
+            frappe.permissions.add_permission("Sales Order", role, 0, "read")
+
+        for permission in ("read", "write", "create", "submit"):
+            frappe.permissions.update_permission_property(
+                "Sales Order", role, 0, permission, 1
+            )
+
+    frappe.clear_cache(doctype="Sales Order")
+
 # Generated BOMs are read-only forever (spec section 7.1). Enforced here at
 # the permission layer, not just by hiding the edit button in the UI - a
 # merchandiser editing a generated BOM directly is exactly the
